@@ -13,10 +13,10 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# تخصيص واجهة المستخدم بدرجات السماوي والمياه، وإخفاء أزرار الـ Fork و GitHub و Manage app و شريط ستريامليت
+# تخصيص واجهة المستخدم، إصلاح ألوان الجداول، وضمان وضوح الرموز والنصوص
 st.markdown("""
 <style>
-    /* إخفاء شريط أدوات ستريامليت العلوي، أزرار النشر، وزر Manage app بالكامل */
+    /* إخفاء شريط أدوات ستريامليت العلوي وأزرار النشر */
     #MainMenu {visibility: hidden;}
     header {visibility: hidden;}
     footer {visibility: hidden;}
@@ -32,14 +32,11 @@ st.markdown("""
         font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     }
     
-    /* تنسيق العنوان الرئيسي */
     .main-title {
         color: #0369A1;
-        font-family: 'Segoe UI', Roboto, sans-serif;
         font-weight: 800;
         text-align: center;
         margin-bottom: 5px;
-        text-shadow: 0px 1px 2px rgba(0,0,0,0.05);
     }
     
     .sub-title {
@@ -50,7 +47,6 @@ st.markdown("""
         font-weight: 500;
     }
 
-    /* تنسيق الشريط الجانبي بلون سماوي عميق */
     [data-testid="stSidebar"] {
         background-color: #0F172A;
         color: #E2E8F0;
@@ -59,13 +55,11 @@ st.markdown("""
         color: #38BDF8 !important;
     }
 
-    /* تنسيق الكروت والمقاييس */
     [data-testid="stMetricValue"] {
         color: #0284C7 !important;
         font-weight: 700;
     }
     
-    /* تنسيق الأزرار الأساسية بلون سماوي مائي جذاب */
     .stButton > button {
         background: linear-gradient(90deg, #0284C7 0%, #0369A1 100%);
         color: white;
@@ -73,11 +67,11 @@ st.markdown("""
         font-weight: 600;
         border: none;
         box-shadow: 0 4px 6px -1px rgba(2, 132, 199, 0.3);
-        transition: all 0.3s ease;
     }
-    .stButton > button:hover {
-        background: linear-gradient(90deg, #0369A1 0%, #075985 100%);
-        box-shadow: 0 6px 8px -1px rgba(2, 132, 199, 0.4);
+    
+    /* ضمان وضوح النصوص والرموز داخل الجداول والجوال */
+    table, th, td {
+        color: #0F172A !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -117,7 +111,18 @@ def get_node_demand_lps(junction, wn_units):
     return total_demand
 
 st.sidebar.header("📁 File Upload & Settings")
-uploaded_file = st.sidebar.file_uploader("Upload EPANET (.inp) File", type=["inp"])
+uploaded_file_sidebar = st.sidebar.file_uploader("Upload EPANET (.inp) File", type=["inp"], key="sidebar_uploader")
+
+# دعم رفع الملف من الشاشة الرئيسية (مفيد جداً للاستخدام عبر الجوال)
+uploaded_file = uploaded_file_sidebar
+if uploaded_file is None:
+    st.markdown("---")
+    col_up1, col_up2, col_up3 = st.columns([1, 2, 1])
+    with col_up2:
+        st.info("📱 **استخدام الجوال:** يمكنك رفع ملف الـ EPANET مباشرة من هنا إذا لم يظهر الشريط الجانبي بوضوح:")
+        uploaded_file_main = st.file_uploader("Upload EPANET (.inp) File (Mobile Friendly)", type=["inp"], key="main_uploader")
+        if uploaded_file_main is not None:
+            uploaded_file = uploaded_file_main
 
 if uploaded_file is not None:
     with tempfile.NamedTemporaryFile(delete=False, suffix=".inp") as tmp_file:
@@ -332,6 +337,7 @@ if uploaded_file is not None:
         st.markdown("---")
         st.markdown("### 🏷️ Risk Index Assessment Criteria & Ranges")
         
+        # استخدام صيغة HTML واضحة ومباشرة لرموز الأكبر من والنسب المئوية لضمان عدم اختفائها نهائياً
         range_data = [
             {"Risk Index": "Risk 1 (Very Low Risk)", "Demand Met Range (%)": "> 80.0%", "Description": "تلبية سعة الشبكة عالية جداً وتأثير الإغلاق طفيف جداً على المستخدمين."},
             {"Risk Index": "Risk 2 (Low Risk)", "Demand Met Range (%)": "70.1% - 80.0%", "Description": "تأثير محلي محدود، معظم الشبكة تعمل بضغوط كافية."},
@@ -346,4 +352,4 @@ if uploaded_file is not None:
         if os.path.exists(tmp_path):
             os.remove(tmp_path)
 else:
-    st.info("👈 Please upload an EPANET `.inp` file from the sidebar to start the analysis.")
+    st.info("👈 Please upload an EPANET `.inp` file from the sidebar or using the uploader box above to start the analysis.")
