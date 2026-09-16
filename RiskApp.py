@@ -112,7 +112,7 @@ if uploaded_file is not None:
 
         with tab2:
             st.subheader("Simulate Pipe Failures (Sequential Closure)")
-            st.write("Calculates exact hydraulic availability by simulating pressure and demand delivery under closed pipe scenarios.")
+            st.write("Calculates exact hydraulic availability by simulating pressure drop and demand coverage for each closed pipe.")
             
             if st.button("🚀 Run Exact Pipe Failure Analysis"):
                 results = []
@@ -121,29 +121,33 @@ if uploaded_file is not None:
 
                 for idx, pipe_name in enumerate(pipes_list):
                     wn_sim = wntr.network.WaterNetworkModel(tmp_path)
-                    pipe_to_close = wn_sim.get_pipe(pipe_name)
                     
-                    # إغلاق الانبوب عن طريق رفع قيمة المعامل الهيدروليكي (Minor Loss) وقفل الحالة
-                    pipe_to_close.initial_status = wntr.network.LinkStatus.Closed
+                    # استخدام get_link الآمنة والمضمونة برمجياً
+                    pipe_to_close = wn_sim.get_link(pipe_name)
+                    
+                    # إغلاق الأنبوب
+                    try:
+                        pipe_to_close.status = wntr.network.LinkStatus.Closed
+                    except Exception:
+                        pipe_to_close.status = 0
                     
                     try:
                         sim = wntr.sim.EpanetSimulator(wn_sim)
                         sim_results = sim.run_sim()
                         
-                        demand_df = sim_results.node['demand']
                         pressure_df = sim_results.node['pressure']
-                        last_time = demand_df.index[-1]
+                        last_time = pressure_df.index[-1]
                         
                         satisfied_demand = 0.0
                         for j_name in wn_sim.junction_name_list:
                             p_val = pressure_df.loc[last_time, j_name]
-                            d_val = demand_df.loc[last_time, j_name]
-                            # تقييم العقد التي يصل إليها الضغط بشكل كافٍ (> 0)
+                            d_lps = junction_demands_lps.get(j_name, 0.0)
+                            
+                            # العقدة تبي الاحتياج إذا كان الضغط موجب كافٍ (> 0)
                             if p_val > 0:
-                                d_lps = junction_demands_lps.get(j_name, 0.0)
                                 satisfied_demand += d_lps
                     except Exception:
-                        # في حالة حدوث فشل هيدروليكي كامل أو انقطاع رئيسي
+                        # في حالة حدوث عدم اتزان هيدروليكي حاد أو انقطاع كامل
                         satisfied_demand = 0.0
 
                     satisfied_demand = min(satisfied_demand, base_total_demand)
