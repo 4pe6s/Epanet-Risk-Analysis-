@@ -71,6 +71,16 @@ def get_node_demand_lps(junction, wn_units):
             return total_demand * 1000.0
     return total_demand
 
+def close_pipe_safely(pipe_obj):
+    """دالة آمنة لإغلاق الأنبوب تتوافق مع كافة إصدارات WNTR"""
+    try:
+        pipe_obj.status = 'CLOSED'
+    except Exception:
+        try:
+            pipe_obj.status = 0
+        except Exception:
+            pipe_obj.initial_status = 'CLOSED'
+
 uploaded_file = st.file_uploader("Drop your .inp file here or click to browse", type=["inp"])
 
 if uploaded_file is not None:
@@ -122,11 +132,11 @@ if uploaded_file is not None:
                 for idx, pipe_name in enumerate(pipes_list):
                     wn_sim = wntr.network.WaterNetworkModel(tmp_path)
                     pipe_to_close = wn_sim.get_link(pipe_name)
-                    # إغلاق الأنبوب هيدروليكياً
-                    pipe_to_close.status = wntr.network.LinkStatus.Closed
+                    
+                    # إغلاق الأنبوب بطريقة آمنة ومتوافقة
+                    close_pipe_safely(pipe_to_close)
                     
                     try:
-                        # استخدام WNTRSimulator الداخلي لتفادي مشاكل C++ Binaries في الاستضافة
                         sim = wntr.sim.WNTRSimulator(wn_sim)
                         sim_results = sim.run_sim()
                         
@@ -142,10 +152,8 @@ if uploaded_file is not None:
                             if p_val > 0 and d_val > 0:
                                 satisfied_demand += (d_val * 1000.0 if d_val < 100 else d_val)
                     except Exception:
-                        # في حالة الانقطاع الكامل أو عدم التوازن الهيدروليكي عند الإغلاق
                         satisfied_demand = 0.0
 
-                    # التأكد من عدم تجاوز إجمالي الطلب
                     satisfied_demand = min(satisfied_demand, base_total_demand)
                     ratio = (satisfied_demand / base_total_demand * 100.0) if base_total_demand > 0 else 0.0
                     risk = map_serviceability_to_risk(ratio)
