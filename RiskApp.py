@@ -192,12 +192,12 @@ if uploaded_file is not None:
                     
                 avg_risk = np.mean(junction_risks) if junction_risks else 1.0
                 results.append({
-                    "Closed Pipe": closed_pipe_id,
-                    "Node 1": pipe["Node1"],
-                    "Node 2": pipe["Node2"],
-                    "Satisfied Demand (L/s)": round(satisfied_demand, 2),
-                    "System Demand Met Ratio": round((satisfied_demand / total_demand * 100) if total_demand > 0 else 100, 2),
-                    "Average Risk Index": round(avg_risk, 2)
+                    "Closed_Pipe": closed_pipe_id,
+                    "Node_1": pipe["Node1"],
+                    "Node_2": pipe["Node2"],
+                    "Satisfied_Demand": round(satisfied_demand, 2),
+                    "Demand_Met_Ratio": round((satisfied_demand / total_demand * 100) if total_demand > 0 else 100, 2),
+                    "Risk_Index": round(avg_risk, 2)
                 })
                 
             df_results = pd.DataFrame(results)
@@ -217,12 +217,15 @@ if uploaded_file is not None:
             
             with col_b:
                 st.subheader("Risk Category Breakdown")
-                fig2, ax2 = plt.subplots(figsize=(6, 4))
-                df_res["Average Risk Index"].value_counts().plot(kind='bar', ax=ax2, color='#DC2626')
-                ax2.set_xlabel("Risk Index (1-5)")
-                ax2.set_ylabel("Count of Critical Pipes")
-                ax2.set_title("Pipe Risk Index Histogram")
-                st.pyplot(fig2)
+                if "Risk_Index" in df_res.columns:
+                    fig2, ax2 = plt.subplots(figsize=(6, 4))
+                    df_res["Risk_Index"].value_counts().sort_index().plot(kind='bar', ax=ax2, color='#DC2626')
+                    ax2.set_xlabel("Risk Index (1-5)")
+                    ax2.set_ylabel("Count of Pipes")
+                    ax2.set_title("Pipe Risk Index Histogram")
+                    st.pyplot(fig2)
+                else:
+                    st.warning("Risk_Index column missing.")
         else:
             st.info("⚠️ يرجى الذهاب للتبويب الثاني (Sequential Closure Simulation) والضغط على زر التشغيل أولاً لإنشاء النتائج.")
 else:
