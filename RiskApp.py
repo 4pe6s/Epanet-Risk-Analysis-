@@ -33,7 +33,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.markdown("<h1 class='main-title'>💧 EPANET Hydraulic & Risk Assessment Suite</h1>", unsafe_allow_html=True)
-st.markdown("<p class='sub-title'>Advanced Sequential Pipe Failure Simulation & Node Diagnostics</p>", unsafe_allow_html=True)
+st.markdown("<p class='sub-title'>Advanced Sequential Pipe Failure Simulation & Dedicated Node Diagnostics</p>", unsafe_allow_html=True)
 
 def map_serviceability_to_risk(ratio):
     if ratio <= 50.0:
@@ -96,7 +96,14 @@ if uploaded_file is not None:
             
         st.divider()
         
-        tab1, tab2, tab3 = st.tabs(["🌐 Network Overview", "⚡ Sequential Closure Simulation", "📊 Risk Index Analysis"])
+        # تقسيم الواجهة إلى 4 تبويبات رئيسية لتنظيم العمل بالكامل
+        tab1, tab2, tab3, tab4 = st.tabs([
+            "🌐 Network Overview", 
+            "⚡ Sequential Closure Simulation", 
+            "🔍 Node & Pressure Diagnostics", 
+            "📊 Risk Index Analysis"
+        ])
+        
         pipes_list = [name for name, p in wn.pipes()]
         
         with tab1:
@@ -106,7 +113,7 @@ if uploaded_file is not None:
 
         with tab2:
             st.subheader("⚡ Simulate Pipe Failures (Sequential Closure)")
-            st.write("Calculates exact hydraulic availability & tracks negative pressure and unmet demands per node.")
+            st.write("Calculates exact hydraulic availability by evaluating pressure drop and demand coverage for each closed pipe.")
             
             if st.button("🚀 Run Exact Pipe Failure Analysis", type="primary", use_container_width=True):
                 results = []
@@ -169,9 +176,19 @@ if uploaded_file is not None:
                 status_text.empty()
                 df_results = pd.DataFrame(results)
                 st.session_state["df_results"] = df_results
-                st.success("✅ Pipe Closure Analysis Completed Successfully!")
+                st.success("✅ Pipe Closure Analysis Completed Successfully! Check the other tabs for detailed diagnostics and charts.")
                 
-                # ترتيب الأعمدة في العرض المباشر بالتبويب الثاني
+                # الجدول المختصر في تبويب السيكويشل كلوزر
+                st.dataframe(df_results[["Closed_Pipe", "Satisfied_Demand (LPS)", "Demand_Met_Ratio (%)", "Risk_Index"]], use_container_width=True)
+
+        with tab3:
+            st.subheader("🔍 Dedicated Node Diagnostics & Pressure Analysis")
+            st.write("استعراض تفصيلي للعُقد المتأثرة، الضغوط السالبة، والطلبات غير المستوفاة عند إغلاق كل أنبوب.")
+            
+            if "df_results" in st.session_state:
+                df_res = st.session_state["df_results"]
+                
+                # جدول مفصل مستقل بالكامل يعرض معلومات النودز قبل الريسك انديكس
                 columns_order = [
                     "Closed_Pipe", 
                     "Satisfied_Demand (LPS)", 
@@ -180,9 +197,11 @@ if uploaded_file is not None:
                     "Unmet_Demand_Nodes", 
                     "Risk_Index"
                 ]
-                st.dataframe(df_results[columns_order], use_container_width=True)
+                st.dataframe(df_res[columns_order], use_container_width=True, height=500)
+            else:
+                st.info("💡 يرجى تشغيل المحاكاة من تبويب (Sequential Closure Simulation) أولاً لتوليد بيانات تشخيص العُقد.")
 
-        with tab3:
+        with tab4:
             st.subheader("📊 Risk Index Classification & Analysis")
             if "df_results" in st.session_state:
                 df_res = st.session_state["df_results"]
@@ -203,19 +222,11 @@ if uploaded_file is not None:
                         )
                 
                 st.write("")
-                col_a, col_b = st.columns([1.4, 1])
+                col_a, col_b = st.columns([1.3, 1])
                 
                 with col_a:
-                    st.markdown("### 📝 Results Table with Node Diagnostics")
-                    columns_order = [
-                        "Closed_Pipe", 
-                        "Satisfied_Demand (LPS)", 
-                        "Demand_Met_Ratio (%)", 
-                        "Negative_Pressure_Nodes", 
-                        "Unmet_Demand_Nodes", 
-                        "Risk_Index"
-                    ]
-                    st.dataframe(df_res[columns_order], use_container_width=True, height=400)
+                    st.markdown("### 📝 Summary Results Table")
+                    st.dataframe(df_res[["Closed_Pipe", "Satisfied_Demand (LPS)", "Demand_Met_Ratio (%)", "Risk_Index"]], use_container_width=True, height=400)
                 
                 with col_b:
                     st.markdown("### 📈 Risk Index Distribution Chart")
@@ -244,6 +255,8 @@ if uploaded_file is not None:
                                      ha='center', va='bottom', fontsize=11, fontweight='bold', color='#0F172A')
                         
                     st.pyplot(fig2)
+            else:
+                st.info("💡 يرجى تشغيل المحاكاة من تبويب (Sequential Closure Simulation) أولاً لعرض النتائج والرسم البياني.")
 
         st.markdown("---")
         st.markdown("### 🏷️ Risk Index Assessment Criteria & Ranges")
