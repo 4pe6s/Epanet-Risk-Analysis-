@@ -6,6 +6,7 @@ import networkx as nx
 import wntr
 import tempfile
 import os
+import re
 
 st.set_page_config(
     page_title="EPANET Hydraulic Simulation Suite",
@@ -39,7 +40,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.markdown("<h1 class='main-title'>💧 EPANET Hydraulic Simulation Suite</h1>", unsafe_allow_html=True)
-st.markdown("<p class='sub-title'>Exact Hydraulic Pipe Closure Analysis with WNTR & Network Graph</p>", unsafe_allow_html=True)
+st.markdown("<p class='sub-title'>Exact Hydraulic Pipe Closure Analysis with WNTR & Raw INP Parser</p>", unsafe_allow_html=True)
 
 def map_serviceability_to_risk(ratio):
     if ratio <= 50.0:
@@ -53,30 +54,58 @@ def map_serviceability_to_risk(ratio):
     else:
         return 1
 
-def get_node_total_base_demand(junction):
-    """حساب إجمالي الطلب لكل العقد بما فيها الشرائح المترابطة Multiple Demand Categories"""
-    total = 0.0
-    try:
-        for d in junction.demand_timeseries_list:
-            total += float(d.base_demand)
-    except Exception:
-        total = float(getattr(junction, 'base_demand', 0.0))
-    return total
+def parse_inp_demands_and_pipes(file_content):
+    """قراءة قيم الاستهلاك مباشرة من نص ملف INP لتفادي خطأ تحويل الوحدات في WNTR"""
+    lines = file_content.decode('utf-8', errors='ignore').splitlines()
+    junction_demands = {}
+    current_section = None
+    
+    for line in lines:
+        line = line.strip()
+        if not line or line.startswith(';'):
+            continue
+        if line.startswith('[') and line.endswith(']'):
+            current_section = line.upper()
+            continue
+            
+        if current_section == '[JUNCTIONS]':
+            parts = line.split()
+            if len(parts) >= 2:
+                j_id = parts[0]
+                try:
+                    demand = float(parts[1])
+                    junction_demands[j_id] = junction_demands.get(j_id, 0.0) + demand
+                except ValueError:
+                    pass
+        elif current_section == '[DEMANDS]':
+            parts = line.split()
+            if len(parts) >= 2:
+                j_id = parts[0]
+                try:
+                    demand = float(parts[1])
+                    junction_demands[j_id] = junction_demands.get(j_id, 0.0) + demand
+                except ValueError:
+                    pass
+                    
+    return junction_demands
 
 uploaded_file = st.file_uploader("Drop your .inp file here or click to browse", type=["inp"])
 
 if uploaded_file is not None:
+    file_bytes = uploaded_file.getvalue()
+    raw_demands = parse_inp_demands_and_pipes(file_bytes)
+    
     with tempfile.NamedTemporaryFile(delete=False, suffix=".inp") as tmp_file:
-        tmp_file.write(uploaded_file.getvalue())
+        tmp_file.write(file_bytes)
         tmp_path = tmp_file.name
 
     try:
         wn = wntr.network.WaterNetworkModel(tmp_path)
         
-        # حساب إجمالي الطلب الحقيقي والدقيق لجميع العقد
-        base_total_demand = sum(get_node_total_base_demand(j) for name, j in wn.junctions())
+        # حساب إجمالي الطلب من القراءة المباشرة
+        base_total_demand = sum(raw_demands.values()) if raw_demands else sum(j.base_demand for name, j in wn.junctions())
         
-        st.success("File uploaded and loaded into EPANET Engine successfully!")
+        st.success("File uploaded and loaded successfully!")
         
         col1, col2, col3, col4 = st.columns(4)
         with col1:
@@ -108,7 +137,6 @@ if uploaded_file is not None:
                 progress_bar = st.progress(0)
                 total_pipes = len(pipes_list)
                 
-                # استخدام الرسم البياني لتحديد الاتصالية الحقيقية بالمصادر (الخزانات)
                 G = wn.to_graph().to_undirected()
                 source_nodes = set(wn.reservoir_name_list + wn.tank_name_list)
 
@@ -127,9 +155,9 @@ if uploaded_file is not None:
                             connected_to_source.update(connected_nodes)
                     
                     satisfied_demand = 0.0
-                    for j_name, j in wn.junctions():
+                    for j_name in raw_demands:
                         if j_name in connected_to_source:
-                            satisfied_demand += get_node_total_base_demand(j)
+                            satisfied_demand += raw_demands[j_name]
 
                     ratio = (satisfied_demand / base_total_demand * 100.0) if base_total_demand > 0 else 0.0
                     risk = map_serviceability_to_risk(ratio)
