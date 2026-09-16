@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import networkx as nx
 import wntr
 import tempfile
 import os
@@ -39,7 +38,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.markdown("<h1 class='main-title'>💧 EPANET Hydraulic Simulation Suite</h1>", unsafe_allow_html=True)
-st.markdown("<p class='sub-title'>Exact Hydraulic Pipe Closure Analysis with WNTR & EPANET Engine</p>", unsafe_allow_html=True)
+st.markdown("<p class='sub-title'>Exact Hydraulic Pipe Closure Analysis with EPANET Engine</p>", unsafe_allow_html=True)
 
 def map_serviceability_to_risk(ratio):
     if ratio <= 50.0:
@@ -63,7 +62,7 @@ if uploaded_file is not None:
     try:
         wn = wntr.network.WaterNetworkModel(tmp_path)
         
-        # حساب إجمالي الطلب الأساسي من الشبكة بشكل صحيح
+        # حساب إجمالي الطلب الأساسي للشبكة
         base_total_demand = sum(j.base_demand for name, j in wn.junctions())
         
         st.success("File uploaded and loaded into EPANET Engine successfully!")
@@ -91,37 +90,40 @@ if uploaded_file is not None:
 
         with tab2:
             st.subheader("Simulate Pipe Failures (Sequential Closure)")
-            st.write("Calculates exact hydraulic availability by closing each pipe sequentially in EPANET.")
+            st.write("Calculates exact hydraulic availability by executing EPANET simulation for each closed pipe.")
             
             if st.button("🚀 Run Exact Pipe Failure Analysis"):
                 results = []
                 progress_bar = st.progress(0)
                 total_pipes = len(pipes_list)
                 
-                G = wn.to_graph().to_undirected()
-                source_nodes = set(wn.reservoir_name_list + wn.tank_name_list)
-
                 for idx, pipe_name in enumerate(pipes_list):
-                    G_temp = G.copy()
-                    pipe_obj = wn.get_link(pipe_name)
-                    u, v = pipe_obj.start_node_name, pipe_obj.end_node_name
+                    # إنشاء نسخة مستقلة لكل أنبوب مغلق
+                    wn_sim = wntr.network.WaterNetworkModel(tmp_path)
+                    pipe_to_close = wn_sim.get_link(pipe_name)
+                    pipe_to_close.status = wntr.network.LinkStatus.Closed
                     
-                    if G_temp.has_edge(u, v):
-                        G_temp.remove_edge(u, v)
-                    
-                    connected_to_source = set()
-                    for src in source_nodes:
-                        if src in G_temp:
-                            connected_nodes = nx.node_connected_component(G_temp, src)
-                            connected_to_source.update(connected_nodes)
-                    
-                    if len(connected_to_source) <= len(source_nodes):
+                    try:
+                        # تشغيل المحاكي الهيدروليكي المباشر
+                        sim = wntr.sim.EpanetSimulator(wn_sim)
+                        sim_results = sim.run_sim()
+                        
+                        # استخراج نتائج الضغط والطلب عند آخر خطوة زمنية
+                        demand_df = sim_results.node['demand']
+                        pressure_df = sim_results.node['pressure']
+                        last_time = demand_df.index[-1]
+                        
                         satisfied_demand = 0.0
-                    else:
+                        for j_name, j in wn_sim.junctions():
+                            p_val = pressure_df.loc[last_time, j_name]
+                            d_val = demand_df.loc[last_time, j_name]
+                            # احتساب الطلب فقط للعقد ذات الضغط الموجب
+                            if p_val >= 0 and d_val > 0:
+                                satisfied_demand += d_val
+                                
+                    except Exception:
+                        # في حالة الانقطاع الكلي أو خطأ التقارب الهيدروليكي
                         satisfied_demand = 0.0
-                        for j_name, j in wn.junctions():
-                            if j_name in connected_to_source:
-                                satisfied_demand += j.base_demand
 
                     ratio = (satisfied_demand / base_total_demand * 100) if base_total_demand > 0 else 0.0
                     risk = map_serviceability_to_risk(ratio)
@@ -137,7 +139,7 @@ if uploaded_file is not None:
                     
                 df_results = pd.DataFrame(results)
                 st.session_state["df_results"] = df_results
-                st.success("Exact EPANET Closure Simulation Completed!")
+                st.success("Exact EPANET Simulation Completed!")
                 st.dataframe(df_results, use_container_width=True)
 
         with tab3:
@@ -176,7 +178,7 @@ if uploaded_file is not None:
         <div class="info-box">
             <h3>💡 مصطلحات وتعريفات التحليل الهيدروليكي:</h3>
             <ul>
-                <li><b>Satisfied Demand (الطلب المستوفى):</b> كمية المياه الفعلية الواصلة للعقد المتصلة بالخزان عند إغلاق الأنبوب المذكور.</li>
+                <li><b>Satisfied Demand (الطلب المستوفى):</b> كمية المياه الفعلية الواصلة للعقد ذات الضغط الموجب عند إغلاق الأنبوب المذكور.</li>
                 <li><b>Demand Met Ratio (نسبة تلبية الطلب):</b> النسبة المئوية للمياه الواصلة مقارنة بالطلب الإجمالي. عند إغلاق أنبوب ناقل رئيسي وتوقف التغذية تماماً تظهر النسبة <b>0.0%</b>.</li>
                 <li><b>Risk Index (مؤشر الخطورة):</b>
                     <ul>
