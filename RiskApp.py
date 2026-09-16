@@ -121,15 +121,10 @@ if uploaded_file is not None:
 
                 for idx, pipe_name in enumerate(pipes_list):
                     wn_sim = wntr.network.WaterNetworkModel(tmp_path)
-                    
-                    # استخدام get_link الآمنة والمضمونة برمجياً
                     pipe_to_close = wn_sim.get_link(pipe_name)
                     
-                    # إغلاق الأنبوب
-                    try:
-                        pipe_to_close.status = wntr.network.LinkStatus.Closed
-                    except Exception:
-                        pipe_to_close.status = 0
+                    # إغلاق الأنبوب بالطريقة الصحيحة المعتمدة في WNTR عبر initial_status
+                    pipe_to_close.initial_status = wntr.network.LinkStatus.Closed
                     
                     try:
                         sim = wntr.sim.EpanetSimulator(wn_sim)
@@ -143,11 +138,10 @@ if uploaded_file is not None:
                             p_val = pressure_df.loc[last_time, j_name]
                             d_lps = junction_demands_lps.get(j_name, 0.0)
                             
-                            # العقدة تبي الاحتياج إذا كان الضغط موجب كافٍ (> 0)
+                            # احتساب الطلب فقط للعقد ذات الضغط الكافي والفرعي الموجب
                             if p_val > 0:
                                 satisfied_demand += d_lps
                     except Exception:
-                        # في حالة حدوث عدم اتزان هيدروليكي حاد أو انقطاع كامل
                         satisfied_demand = 0.0
 
                     satisfied_demand = min(satisfied_demand, base_total_demand)
