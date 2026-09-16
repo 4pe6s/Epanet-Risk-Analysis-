@@ -63,12 +63,15 @@ if uploaded_file is not None:
     try:
         wn = wntr.network.WaterNetworkModel(tmp_path)
         
-        # استخراج الطلبات بـ LPS (مجموع كافة فئات الطلب لكل عقدة)
+        # استخراج الطلبات بـ LPS لجميع العقد بشكل صحيح
         junction_demands_lps = {}
         for name, j in wn.junctions():
-            # تحويل الوحدة من m3/s الخاصة بـ WNTR إلى LPS المعتمدة لديك
-            d_lps = float(j.demand_timeseries_list.base_demand) * 1000.0
-            junction_demands_lps[name] = d_lps
+            node_demand_m3s = 0.0
+            # الجمع لجميع فئات الطلب داخل العقدة
+            for ts in j.demand_timeseries_list:
+                node_demand_m3s += float(ts.base_demand)
+            # تحويل من m3/s إلى LPS (الضرب في 1000)
+            junction_demands_lps[name] = node_demand_m3s * 1000.0
 
         base_total_demand = sum(junction_demands_lps.values())
         
