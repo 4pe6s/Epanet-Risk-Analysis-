@@ -13,21 +13,69 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# تخصيص واجهة المستخدم بدرجات السماوي والمياه، وإخفاء أزرار الـ Fork و GitHub وشريط ستريامليت العلوي
 st.markdown("""
 <style>
-    .main { background-color: #F8FAFC; }
+    /* إخفاء شريط أدوات ستريامليت العلوي وأزرار الـ Fork و GitHub و Menu بالكامل */
+    #MainMenu {visibility: hidden;}
+    header {visibility: hidden;}
+    footer {visibility: hidden;}
+    .stAppToolbar {display: none !important;}
+    [data-testid="stDecoration"] {display: none !important;}
+    [data-testid="stStatusWidget"] {display: none !important;}
+
+    /* خلفية عامة بتدرجات مائية هادئة وفخمة */
+    .main {
+        background: linear-gradient(135deg, #F0F9FF 0%, #E0F2FE 100%);
+        font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    }
+    
+    /* تنسيق العنوان الرئيسي */
     .main-title {
-        color: #0F172A;
+        color: #0369A1;
         font-family: 'Segoe UI', Roboto, sans-serif;
         font-weight: 800;
         text-align: center;
         margin-bottom: 5px;
+        text-shadow: 0px 1px 2px rgba(0,0,0,0.05);
     }
+    
     .sub-title {
-        color: #475569;
+        color: #0284C7;
         text-align: center;
         font-size: 1.15rem;
         margin-bottom: 25px;
+        font-weight: 500;
+    }
+
+    /* تنسيق الشريط الجانبي بلون سماوي عميق */
+    [data-testid="stSidebar"] {
+        background-color: #0F172A;
+        color: #E2E8F0;
+    }
+    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3, [data-testid="stSidebar"] label {
+        color: #38BDF8 !important;
+    }
+
+    /* تنسيق الكروت والمقاييس */
+    [data-testid="stMetricValue"] {
+        color: #0284C7 !important;
+        font-weight: 700;
+    }
+    
+    /* تنسيق الأزرار الأساسية بلون سماوي مائي جذاب */
+    .stButton > button {
+        background: linear-gradient(90deg, #0284C7 0%, #0369A1 100%);
+        color: white;
+        border-radius: 8px;
+        font-weight: 600;
+        border: none;
+        box-shadow: 0 4px 6px -1px rgba(2, 132, 199, 0.3);
+        transition: all 0.3s ease;
+    }
+    .stButton > button:hover {
+        background: linear-gradient(90deg, #0369A1 0%, #075985 100%);
+        box-shadow: 0 6px 8px -1px rgba(2, 132, 199, 0.4);
     }
 </style>
 """, unsafe_allow_html=True)
@@ -149,7 +197,6 @@ if uploaded_file is not None:
                             h_val = head_df.loc[last_time, j_name]
                             d_val = demand_df.loc[last_time, j_name]
                             
-                            # تحويل الوحدات لـ LPS إذا لزم الأمر مثل الدالة المساعدة
                             d_lps = d_val
                             if str(wn_units).upper() in ['LPS', 'SI', 'M3/S', 'M3S'] and d_val < 100 and d_val > 0:
                                 d_lps = d_val * 1000.0
@@ -231,7 +278,7 @@ if uploaded_file is not None:
                 risk_counts = df_res["Risk_Index"].value_counts().reindex([1, 2, 3, 4, 5], fill_value=0)
                 
                 m_cols = st.columns(5)
-                colors_hex = ['#2563EB', '#38BDF8', '#EAB308', '#F97316', '#DC2626']
+                colors_hex = ['#0284C7', '#38BDF8', '#EAB308', '#F97316', '#DC2626']
                 
                 for i in range(1, 6):
                     with m_cols[i-1]:
@@ -252,7 +299,7 @@ if uploaded_file is not None:
                 
                 with col_b:
                     st.markdown("### 📈 Risk Index Distribution Chart")
-                    color_map = {1: '#2563EB', 2: '#38BDF8', 3: '#EAB308', 4: '#F97316', 5: '#DC2626'}
+                    color_map = {1: '#0284C7', 2: '#38BDF8', 3: '#EAB308', 4: '#F97316', 5: '#DC2626'}
                     bar_colors = [color_map[idx] for idx in range(1, 6)]
                     
                     fig2, ax2 = plt.subplots(figsize=(6, 4.5))
