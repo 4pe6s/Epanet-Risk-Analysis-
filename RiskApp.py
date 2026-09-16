@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import networkx as nx
 import wntr
 import tempfile
 import os
@@ -71,16 +72,6 @@ def get_node_demand_lps(junction, wn_units):
             return total_demand * 1000.0
     return total_demand
 
-def close_pipe_safely(pipe_obj):
-    """دالة آمنة لإغلاق الأنبوب تتوافق مع كافة إصدارات WNTR"""
-    try:
-        pipe_obj.status = 'CLOSED'
-    except Exception:
-        try:
-            pipe_obj.status = 0
-        except Exception:
-            pipe_obj.initial_status = 'CLOSED'
-
 uploaded_file = st.file_uploader("Drop your .inp file here or click to browse", type=["inp"])
 
 if uploaded_file is not None:
@@ -122,39 +113,39 @@ if uploaded_file is not None:
 
         with tab2:
             st.subheader("Simulate Pipe Failures (Sequential Closure)")
-            st.write("Calculates exact hydraulic availability by evaluating pressure & system demand for each closed pipe.")
+            st.write("Calculates exact hydraulic availability by evaluating network connectivity & reachability from source.")
             
             if st.button("🚀 Run Exact Pipe Failure Analysis"):
                 results = []
                 progress_bar = st.progress(0)
                 total_pipes = len(pipes_list)
+                
+                # إنشاء تمثيل الشبكة على شكل الرسم البياني (Graph)
+                G_base = wn.to_graph().to_undirected()
+                source_nodes = set(wn.reservoir_name_list + wn.tank_name_list)
 
                 for idx, pipe_name in enumerate(pipes_list):
-                    wn_sim = wntr.network.WaterNetworkModel(tmp_path)
-                    pipe_to_close = wn_sim.get_link(pipe_name)
+                    G_temp = G_base.copy()
+                    pipe_obj = wn.get_link(pipe_name)
+                    u, v = pipe_obj.start_node_name, pipe_obj.end_node_name
                     
-                    # إغلاق الأنبوب بطريقة آمنة ومتوافقة
-                    close_pipe_safely(pipe_to_close)
+                    # إزالة الأنبوب المغلق من الرسم البياني للشبكة
+                    if G_temp.has_edge(u, v):
+                        G_temp.remove_edge(u, v)
                     
-                    try:
-                        sim = wntr.sim.WNTRSimulator(wn_sim)
-                        sim_results = sim.run_sim()
-                        
-                        demand_df = sim_results.node['demand']
-                        pressure_df = sim_results.node['pressure']
-                        last_time = demand_df.index[-1]
-                        
-                        satisfied_demand = 0.0
-                        for j_name in wn_sim.junction_name_list:
-                            p_val = pressure_df.loc[last_time, j_name]
-                            d_val = demand_df.loc[last_time, j_name]
-                            # احتساب الطلب الواصل فقط للعقد ذات الضغط الموجب (> 0)
-                            if p_val > 0 and d_val > 0:
-                                satisfied_demand += (d_val * 1000.0 if d_val < 100 else d_val)
-                    except Exception:
-                        satisfied_demand = 0.0
+                    # استخراج جميع العقد التي ما زالت متصلة بالخزان أو الخزان العلوي
+                    connected_to_source = set()
+                    for src in source_nodes:
+                        if src in G_temp:
+                            connected_nodes = nx.node_connected_component(G_temp, src)
+                            connected_to_source.update(connected_nodes)
+                    
+                    # جمع الاحتياجات الملبية للعقد المتصلة فقط
+                    satisfied_demand = 0.0
+                    for j_name, d_val in junction_demands_lps.items():
+                        if j_name in connected_to_source:
+                            satisfied_demand += d_val
 
-                    satisfied_demand = min(satisfied_demand, base_total_demand)
                     ratio = (satisfied_demand / base_total_demand * 100.0) if base_total_demand > 0 else 0.0
                     risk = map_serviceability_to_risk(ratio)
                     
@@ -208,9 +199,9 @@ if uploaded_file is not None:
         <div class="info-box">
             <h3>💡 مصطلحات وتعريفات التحليل الهيدروليكي:</h3>
             <ul>
-                <li><b>Satisfied Demand (الطلب المستوفى):</b> كمية المياه الفعلية الواصلة للعقد ذات الضغط الموجب بوحدة LPS.</li>
+                <li><b>Satisfied Demand (الطلب المستوفى):</b> كمية المياه الواصلة للعقد المتصلة هيدروليكياً بالخزان بوحدة LPS.</li>
                 <li><b>Demand Met Ratio (نسبة تلبية الطلب):</b> النسبة المئوية للمياه الواصلة مقارنة بالطلب الإجمالي.</li>
-                <li><b>Risk Index (مؤشر الخطورة):</b> من 1 (منخفض) إلى 5 (حرج).</li>
+                <li><b>Risk Index (مؤشر الخطورة):</b> قياس الأثر الناتجة عن انقطاع الخط (1: منخفض -> 5: حرج جداً).</li>
             </ul>
         </div>
         """, unsafe_allow_html=True)
