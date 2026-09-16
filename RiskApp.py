@@ -207,14 +207,13 @@ if uploaded_file is not None:
 
     with tab3:
         st.subheader("Risk Index Classification & Map")
-        if "df_results" in st.session_state:
+        if "df_results" in st.session_state and isinstance(st.session_state["df_results"], pd.DataFrame):
             df_res = st.session_state["df_results"]
             
             col_a, col_b = st.columns([1, 1])
             with col_a:
                 st.subheader("Risk Distribution Table")
-                selected_cols = ["Closed Pipe", "Average Risk Index", "System Demand Met Ratio"]
-                st.dataframe(df_res[selected_cols], use_container_width=True)
+                st.dataframe(df_res, use_container_width=True)
             
             with col_b:
                 st.subheader("Risk Category Breakdown")
@@ -225,6 +224,6 @@ if uploaded_file is not None:
                 ax2.set_title("Pipe Risk Index Histogram")
                 st.pyplot(fig2)
         else:
-            st.info("Please run the sequential simulation in Tab 2 first.")
+            st.info("⚠️ يرجى الذهاب للتبويب الثاني (Sequential Closure Simulation) والضغط على زر التشغيل أولاً لإنشاء النتائج.")
 else:
     st.info("Please upload an EPANET `.inp` file to start the automated analysis.")
