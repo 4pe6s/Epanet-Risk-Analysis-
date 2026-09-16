@@ -213,7 +213,8 @@ if uploaded_file is not None:
             col_a, col_b = st.columns([1, 1])
             with col_a:
                 st.subheader("Risk Distribution Table")
-                st.dataframe(df_res[["Closed Pipe", "Average Risk Index", "System Demand Met Ratio"]], use_container_width=True)
+                selected_cols = ["Closed Pipe", "Average Risk Index", "System Demand Met Ratio"]
+                st.dataframe(df_res[selected_cols], use_container_width=True)
             
             with col_b:
                 st.subheader("Risk Category Breakdown")
