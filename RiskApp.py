@@ -170,7 +170,17 @@ if uploaded_file is not None:
                 df_results = pd.DataFrame(results)
                 st.session_state["df_results"] = df_results
                 st.success("✅ Pipe Closure Analysis Completed Successfully!")
-                st.dataframe(df_results, use_container_width=True)
+                
+                # ترتيب الأعمدة في العرض المباشر بالتبويب الثاني
+                columns_order = [
+                    "Closed_Pipe", 
+                    "Satisfied_Demand (LPS)", 
+                    "Demand_Met_Ratio (%)", 
+                    "Negative_Pressure_Nodes", 
+                    "Unmet_Demand_Nodes", 
+                    "Risk_Index"
+                ]
+                st.dataframe(df_results[columns_order], use_container_width=True)
 
         with tab3:
             st.subheader("📊 Risk Index Classification & Analysis")
@@ -193,11 +203,19 @@ if uploaded_file is not None:
                         )
                 
                 st.write("")
-                col_a, col_b = st.columns([1.3, 1])
+                col_a, col_b = st.columns([1.4, 1])
                 
                 with col_a:
-                    st.markdown("### 📝 Results Table with Node Data")
-                    st.dataframe(df_res[["Closed_Pipe", "Satisfied_Demand (LPS)", "Demand_Met_Ratio (%)", "Negative_Pressure_Nodes", "Unmet_Demand_Nodes", "Risk_Index"]], use_container_width=True, height=400)
+                    st.markdown("### 📝 Results Table with Node Diagnostics")
+                    columns_order = [
+                        "Closed_Pipe", 
+                        "Satisfied_Demand (LPS)", 
+                        "Demand_Met_Ratio (%)", 
+                        "Negative_Pressure_Nodes", 
+                        "Unmet_Demand_Nodes", 
+                        "Risk_Index"
+                    ]
+                    st.dataframe(df_res[columns_order], use_container_width=True, height=400)
                 
                 with col_b:
                     st.markdown("### 📈 Risk Index Distribution Chart")
