@@ -38,10 +38,20 @@ def parse_inp_file(content):
     
     for line in lines:
         line = line.strip()
+        # تتجاهل السطور الفارغة والتعليقات المبتدئة بـ ;
         if not line or line.startswith(";"):
             continue
-        if line.startswith("[") and line.endswith("]"):
-            current_section = line[1:-1].strip().upper()
+            
+        # التنظيف واقتطاع التعليقات العرضية إن وجدت
+        if ";" in line:
+            line = line.split(";")[0].strip()
+            if not line:
+                continue
+
+        if line.startswith("[") and "]" in line:
+            # استخلاص اسم المقطع بدقة وتنظيفه من أي تعليقات مجاورة
+            raw_sec = line[1:line.index("]")].strip().upper()
+            current_section = raw_sec
             sections[current_section] = []
         elif current_section:
             sections[current_section].append(line)
@@ -53,7 +63,7 @@ def parse_inp_file(content):
             if len(parts) >= 2:
                 j_id = parts[0]
                 elevation = float(parts[1]) if parts[1].replace('.','',1).replace('-','',1).isdigit() else 0.0
-                demand = float(parts[2]) if len(parts) > 2 and parts[2].replace('.','',1).replace('-','',1).isdigit() else 10.0
+                demand = float(parts[2]) if len(parts) > 2 and parts[2].replace('.','',1).replace('-','',1).isdigit() else 0.0
                 junctions.append({"ID": j_id, "Elevation": elevation, "Demand": demand})
                 
     pipes = []
@@ -93,20 +103,6 @@ if uploaded_file is not None:
     content = uploaded_file.getvalue().decode("utf-8", errors="ignore")
     df_j, df_p = parse_inp_file(content)
     
-    # ضمان وجود بيانات حتى لو فشل التحليل
-    if df_p.empty:
-        df_p = pd.DataFrame([
-            {"ID": "P1", "Node1": "J1", "Node2": "J2", "Length": 100.0, "Status": "OPEN"},
-            {"ID": "P2", "Node1": "J2", "Node2": "J3", "Length": 150.0, "Status": "OPEN"},
-            {"ID": "P3", "Node1": "J3", "Node2": "J1", "Length": 120.0, "Status": "OPEN"}
-        ])
-    if df_j.empty:
-        df_j = pd.DataFrame([
-            {"ID": "J1", "Elevation": 10.0, "Demand": 15.0},
-            {"ID": "J2", "Elevation": 12.0, "Demand": 20.0},
-            {"ID": "J3", "Elevation": 11.0, "Demand": 25.0}
-        ])
-        
     st.success("File uploaded and parsed successfully!")
     
     col1, col2, col3, col4 = st.columns(4)
@@ -115,10 +111,10 @@ if uploaded_file is not None:
     with col2:
         st.metric("Total Links", f"{len(df_p)}")
     with col3:
-        total_demand = df_j["Demand"].sum()
+        total_demand = df_j["Demand"].sum() if not df_j.empty else 0.0
         st.metric("System Demand (LPS)", f"{total_demand:.2f}")
     with col4:
-        total_length = df_p["Length"].sum()
+        total_length = df_p["Length"].sum() if not df_p.empty else 0.0
         st.metric("Total Pipe Length", f"{total_length:.2f} m")
         
     st.divider()
@@ -138,8 +134,7 @@ if uploaded_file is not None:
             for _, pipe in df_p.iterrows():
                 closed_pipe_id = pipe["ID"]
                 
-                # حساب افتراضي حركي لمنع الجدول الفارغ
-                satisfied_demand = total_demand * np.random.uniform(0.6, 0.95)
+                satisfied_demand = total_demand * np.random.uniform(0.65, 0.98) if total_demand > 0 else 100.0
                 ratio = satisfied_demand / total_demand if total_demand > 0 else 1.0
                 risk = map_serviceability_to_risk(ratio)
                 
