@@ -62,29 +62,31 @@ if uploaded_file is not None:
 
     try:
         wn = wntr.network.WaterNetworkModel(tmp_path)
-        base_total_demand = sum(j.base_demand for j in wn.junctions())
+        
+        # حساب إجمالي الطلب الأساسي من الشبكة بشكل صحيح
+        base_total_demand = sum(j.base_demand for name, j in wn.junctions())
         
         st.success("File uploaded and loaded into EPANET Engine successfully!")
         
         col1, col2, col3, col4 = st.columns(4)
         with col1:
-            st.metric("Total Nodes", f"{len(wn.junctions)}")
+            st.metric("Total Nodes", f"{len(list(wn.junctions()))}")
         with col2:
-            st.metric("Total Links", f"{len(wn.pipes)}")
+            st.metric("Total Links", f"{len(list(wn.pipes()))}")
         with col3:
             st.metric("Base System Demand (LPS)", f"{base_total_demand:.2f}")
         with col4:
-            total_length = sum(p.length for p in wn.pipes())
+            total_length = sum(p.length for name, p in wn.pipes())
             st.metric("Total Pipe Length", f"{total_length:.2f} m")
             
         st.divider()
         
         tab1, tab2, tab3 = st.tabs(["🌐 Network Overview", "⚡ Sequential Closure Simulation", "📊 Risk Index Analysis"])
-        pipes_list = [p.name for p in wn.pipes()]
+        pipes_list = [name for name, p in wn.pipes()]
         
         with tab1:
             st.subheader("Network Summary")
-            pipes_data = [{"ID": p.name, "Length": p.length, "Diameter": p.diameter, "Roughness": p.roughness} for p in wn.pipes()]
+            pipes_data = [{"ID": name, "Length": p.length, "Diameter": p.diameter, "Roughness": p.roughness} for name, p in wn.pipes()]
             st.dataframe(pd.DataFrame(pipes_data), use_container_width=True)
 
         with tab2:
