@@ -6,39 +6,65 @@ import wntr
 import tempfile
 import os
 
+# إعداد الصفحة وتعيين الثيم العام
 st.set_page_config(
-    page_title="EPANET Hydraulic Simulation Suite",
+    page_title="EPANET Hydraulic & Risk Assessment Suite",
     page_icon="💧",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
+# تحسين تصميم الواجهة باستخدام CSS مخصص
 st.markdown("""
 <style>
+    /* خلفية التطبيق وتنسيق النصوص */
+    .main {
+        background-color: #F8FAFC;
+    }
     .main-title {
-        color: #1E3A8A;
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        font-weight: 700;
+        color: #0F172A;
+        font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        font-weight: 800;
         text-align: center;
         margin-bottom: 5px;
     }
     .sub-title {
-        color: #4B5563;
+        color: #475569;
         text-align: center;
-        font-size: 1.1rem;
+        font-size: 1.15rem;
         margin-bottom: 25px;
     }
+    /* بطاقات المعلومات */
+    .metric-card {
+        background-color: #FFFFFF;
+        padding: 18px;
+        border-radius: 12px;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        border-left: 5px solid #2563EB;
+        text-align: center;
+    }
     .info-box {
-        background-color: #F3F4F6;
-        padding: 15px;
-        border-radius: 8px;
-        border-right: 5px solid #1E3A8A;
+        background-color: #FFFFFF;
+        padding: 20px;
+        border-radius: 12px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        border: 1px solid #E2E8F0;
         margin-top: 25px;
+    }
+    /* جداول النطاقات */
+    .risk-badge {
+        padding: 6px 12px;
+        border-radius: 6px;
+        font-weight: bold;
+        color: white;
+        display: inline-block;
     }
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown("<h1 class='main-title'>💧 EPANET Hydraulic Simulation Suite</h1>", unsafe_allow_html=True)
-st.markdown("<p class='sub-title'>Exact Hydraulic Pipe Closure Analysis (LPS Units)</p>", unsafe_allow_html=True)
+# الهيدر الرئيسي
+st.markdown("<h1 class='main-title'>💧 EPANET Hydraulic & Risk Assessment Suite</h1>", unsafe_allow_html=True)
+st.markdown("<p class='sub-title'>Advanced Sequential Pipe Failure Simulation & Criticality Mapping</p>", unsafe_allow_html=True)
 
 def map_serviceability_to_risk(ratio):
     if ratio <= 50.0:
@@ -71,7 +97,9 @@ def get_node_demand_lps(junction, wn_units):
             return total_demand * 1000.0
     return total_demand
 
-uploaded_file = st.file_uploader("Drop your .inp file here or click to browse", type=["inp"])
+# منطقة رفع الملفات
+st.sidebar.header("📁 File Upload & Settings")
+uploaded_file = st.sidebar.file_uploader("Upload EPANET (.inp) File", type=["inp"])
 
 if uploaded_file is not None:
     with tempfile.NamedTemporaryFile(delete=False, suffix=".inp") as tmp_file:
@@ -87,18 +115,17 @@ if uploaded_file is not None:
 
         base_total_demand = sum(junction_demands_lps.values())
         
-        st.success("File uploaded successfully!")
-        
+        # كروت ملخص الشبكة الفنية
         col1, col2, col3, col4 = st.columns(4)
         with col1:
             st.metric("Total Nodes", f"{len(list(wn.junctions()))}")
         with col2:
-            st.metric("Total Links", f"{len(list(wn.pipes()))}")
+            st.metric("Total Links / Pipes", f"{len(list(wn.pipes()))}")
         with col3:
-            st.metric("Base System Demand (LPS)", f"{base_total_demand:.2f}")
+            st.metric("Base System Demand", f"{base_total_demand:.2f} LPS")
         with col4:
             total_length = sum(p.length for name, p in wn.pipes())
-            st.metric("Total Pipe Length", f"{total_length:.2f} m")
+            st.metric("Total Network Length", f"{total_length:.2f} m")
             
         st.divider()
         
@@ -106,24 +133,25 @@ if uploaded_file is not None:
         pipes_list = [name for name, p in wn.pipes()]
         
         with tab1:
-            st.subheader("Network Summary")
-            pipes_data = [{"ID": name, "Length": p.length, "Diameter": p.diameter, "Roughness": p.roughness} for name, p in wn.pipes()]
+            st.subheader("📋 Network Components Summary")
+            pipes_data = [{"ID": name, "Length (m)": p.length, "Diameter (m)": p.diameter, "Roughness": p.roughness} for name, p in wn.pipes()]
             st.dataframe(pd.DataFrame(pipes_data), use_container_width=True)
 
         with tab2:
-            st.subheader("Simulate Pipe Failures (Sequential Closure)")
-            st.write("Calculates exact hydraulic availability by simulating pressure drop and demand coverage for each closed pipe.")
+            st.subheader("⚡ Simulate Pipe Failures (Sequential Closure)")
+            st.write("Calculates exact hydraulic availability by evaluating pressure drop and demand coverage for each closed pipe.")
             
-            if st.button("🚀 Run Exact Pipe Failure Analysis"):
+            if st.button("🚀 Run Exact Pipe Failure Analysis", type="primary", use_container_width=True):
                 results = []
                 progress_bar = st.progress(0)
+                status_text = st.empty()
                 total_pipes = len(pipes_list)
 
                 for idx, pipe_name in enumerate(pipes_list):
+                    status_text.text(f"Simulating failure for Pipe {pipe_name} ({idx+1}/{total_pipes})...")
+                    
                     wn_sim = wntr.network.WaterNetworkModel(tmp_path)
                     pipe_to_close = wn_sim.get_link(pipe_name)
-                    
-                    # إغلاق الأنبوب بالطريقة الصحيحة المعتمدة في WNTR عبر initial_status
                     pipe_to_close.initial_status = wntr.network.LinkStatus.Closed
                     
                     try:
@@ -137,8 +165,6 @@ if uploaded_file is not None:
                         for j_name in wn_sim.junction_name_list:
                             p_val = pressure_df.loc[last_time, j_name]
                             d_lps = junction_demands_lps.get(j_name, 0.0)
-                            
-                            # احتساب الطلب فقط للعقد ذات الضغط الكافي والفرعي الموجب
                             if p_val > 0:
                                 satisfied_demand += d_lps
                     except Exception:
@@ -151,62 +177,71 @@ if uploaded_file is not None:
                     results.append({
                         "Closed_Pipe": pipe_name,
                         "Satisfied_Demand (LPS)": round(float(satisfied_demand), 2),
-                        "Demand_Met_Ratio": round(float(ratio), 2),
+                        "Demand_Met_Ratio (%)": f"{round(float(ratio), 2)}%",
                         "Risk_Index": risk
                     })
                     
                     progress_bar.progress((idx + 1) / total_pipes)
-                    
+                
+                status_text.empty()
                 df_results = pd.DataFrame(results)
                 st.session_state["df_results"] = df_results
-                st.success("Pipe Closure Analysis Completed Successfully!")
+                st.success("✅ Pipe Closure Analysis Completed Successfully!")
                 st.dataframe(df_results, use_container_width=True)
 
         with tab3:
-            st.subheader("Risk Index Classification & Map")
+            st.subheader("📊 Risk Index Classification & Analysis")
             if "df_results" in st.session_state:
                 df_res = st.session_state["df_results"]
                 
-                col_a, col_b = st.columns([1, 1])
+                col_a, col_b = st.columns([1.2, 1])
                 with col_a:
-                    st.subheader("Risk Distribution Table")
-                    st.dataframe(df_res[["Closed_Pipe", "Satisfied_Demand (LPS)", "Demand_Met_Ratio", "Risk_Index"]], use_container_width=True)
+                    st.markdown("### 📝 Results Table")
+                    st.dataframe(df_res[["Closed_Pipe", "Satisfied_Demand (LPS)", "Demand_Met_Ratio (%)", "Risk_Index"]], use_container_width=True)
                 
                 with col_b:
-                    st.subheader("Risk Category Breakdown")
+                    st.markdown("### 📈 Risk Category Breakdown")
                     color_map = {
-                        1: '#2563EB',
-                        2: '#38BDF8',
-                        3: '#EAB308',
-                        4: '#F97316',
-                        5: '#DC2626'
+                        1: '#2563EB', # أزرق
+                        2: '#38BDF8', # أزرق فاتح
+                        3: '#EAB308', # أصفر
+                        4: '#F97316', # برتقالي
+                        5: '#DC2626'  # أحمر
                     }
                     
                     counts = df_res["Risk_Index"].value_counts().sort_index()
                     bar_colors = [color_map.get(idx, '#2563EB') for idx in counts.index]
                     
                     fig2, ax2 = plt.subplots(figsize=(6, 4))
-                    ax2.bar(counts.index.astype(str), counts.values, color=bar_colors)
-                    ax2.set_xlabel("Risk Index (1: Low Risk -> 5: High Risk)")
-                    ax2.set_ylabel("Count of Pipes")
-                    ax2.set_title("Pipe Risk Index Histogram")
+                    bars = ax2.bar(counts.index.astype(str), counts.values, color=bar_colors, edgecolor='black', linewidth=0.5)
+                    ax2.set_xlabel("Risk Index Category (1 to 5)", fontsize=10, fontweight='bold')
+                    ax2.set_ylabel("Number of Pipes", fontsize=10, fontweight='bold')
+                    ax2.grid(axis='y', linestyle='--', alpha=0.7)
+                    
+                    for bar in bars:
+                        yval = bar.get_height()
+                        ax2.text(bar.get_x() + bar.get_width()/2, yval + 0.1, int(yval), ha='center', va='bottom', fontweight='bold')
+                        
                     st.pyplot(fig2)
             else:
-                st.info("يرجى تشغيل المحاكاة من التبويب الثاني أولاً.")
+                st.info("💡 يرجى تشغيل المحاكاة من تبويب (Sequential Closure Simulation) أولاً لعرض نتائج مؤشر الخطورة.")
 
-        st.markdown("""
-        <div class="info-box">
-            <h3>💡 مصطلحات وتعريفات التحليل الهيدروليكي:</h3>
-            <ul>
-                <li><b>Satisfied Demand (الطلب المستوفى):</b> كمية المياه الواصلة للعقد ذات الضغط الموجب هيدروليكياً بوحدة LPS.</li>
-                <li><b>Demand Met Ratio (نسبة تلبية الطلب):</b> النسبة المئوية للمياه الواصلة مقارنة بالطلب الإجمالي.</li>
-                <li><b>Risk Index (مؤشر الخطورة):</b> قياس الأثر الناتجة عن انقطاع الخط (1: منخفض -> 5: حرج جداً).</li>
-            </ul>
-        </div>
-        """, unsafe_allow_html=True)
+        # قسم شرح مستويات ورينج مؤشر الخطورة (Risk Index Criteria)
+        st.markdown("---")
+        st.markdown("### 🏷️ Risk Index Assessment Criteria & Ranges")
+        
+        range_data = [
+            {"Risk Index": "Risk 1 (Very Low Risk)", "Demand Met Range (%)": "> 80.0%", "Description": "تلبية سعة الشبكة عالية جداً وتأثير الإغلاق طفيف جداً على المستخدمين."},
+            {"Risk Index": "Risk 2 (Low Risk)", "Demand Met Range (%)": "70.1% - 80.0%", "Description": "تأثير محلي محدود، معظم الشبكة تعمل بضغوط كافية."},
+            {"Risk Index": "Risk 3 (Moderate Risk)", "Demand Met Range (%)": "60.1% - 70.0%", "Description": "انخفاض متوسط في الضغوط وانقطاع جزئي في بعض المناطق الحيوية."},
+            {"Risk Index": "Risk 4 (High Risk)", "Demand Met Range (%)": "50.1% - 60.0%", "Description": "انخفاض حاد في ضغط المياه وتأثر قطاع واسع من مستهلكي الشبكة."},
+            {"Risk Index": "Risk 5 (Critical Risk)", "Demand Met Range (%)": "≤ 50.0%", "Description": "فشل هيدروليكي حرج، الانقطاع يطال غالبية أجزاء الشبكة أو خط رئيسي."}
+        ]
+        
+        st.table(pd.DataFrame(range_data))
 
     finally:
         if os.path.exists(tmp_path):
             os.remove(tmp_path)
 else:
-    st.info("Please upload an EPANET `.inp` file to start the automated analysis.")
+    st.info("👈 Please upload an EPANET `.inp` file from the sidebar to start the analysis.")
