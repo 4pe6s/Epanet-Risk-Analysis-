@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import networkx as nx
 import wntr
 import tempfile
 import os
@@ -113,39 +112,41 @@ if uploaded_file is not None:
 
         with tab2:
             st.subheader("Simulate Pipe Failures (Sequential Closure)")
-            st.write("Calculates exact hydraulic availability by evaluating network connectivity & reachability from source.")
+            st.write("Calculates exact hydraulic availability by simulating pressure and demand delivery under closed pipe scenarios.")
             
             if st.button("🚀 Run Exact Pipe Failure Analysis"):
                 results = []
                 progress_bar = st.progress(0)
                 total_pipes = len(pipes_list)
-                
-                # إنشاء تمثيل الشبكة على شكل الرسم البياني (Graph)
-                G_base = wn.to_graph().to_undirected()
-                source_nodes = set(wn.reservoir_name_list + wn.tank_name_list)
 
                 for idx, pipe_name in enumerate(pipes_list):
-                    G_temp = G_base.copy()
-                    pipe_obj = wn.get_link(pipe_name)
-                    u, v = pipe_obj.start_node_name, pipe_obj.end_node_name
+                    wn_sim = wntr.network.WaterNetworkModel(tmp_path)
+                    pipe_to_close = wn_sim.get_pipe(pipe_name)
                     
-                    # إزالة الأنبوب المغلق من الرسم البياني للشبكة
-                    if G_temp.has_edge(u, v):
-                        G_temp.remove_edge(u, v)
+                    # إغلاق الانبوب عن طريق رفع قيمة المعامل الهيدروليكي (Minor Loss) وقفل الحالة
+                    pipe_to_close.initial_status = wntr.network.LinkStatus.Closed
                     
-                    # استخراج جميع العقد التي ما زالت متصلة بالخزان أو الخزان العلوي
-                    connected_to_source = set()
-                    for src in source_nodes:
-                        if src in G_temp:
-                            connected_nodes = nx.node_connected_component(G_temp, src)
-                            connected_to_source.update(connected_nodes)
-                    
-                    # جمع الاحتياجات الملبية للعقد المتصلة فقط
-                    satisfied_demand = 0.0
-                    for j_name, d_val in junction_demands_lps.items():
-                        if j_name in connected_to_source:
-                            satisfied_demand += d_val
+                    try:
+                        sim = wntr.sim.EpanetSimulator(wn_sim)
+                        sim_results = sim.run_sim()
+                        
+                        demand_df = sim_results.node['demand']
+                        pressure_df = sim_results.node['pressure']
+                        last_time = demand_df.index[-1]
+                        
+                        satisfied_demand = 0.0
+                        for j_name in wn_sim.junction_name_list:
+                            p_val = pressure_df.loc[last_time, j_name]
+                            d_val = demand_df.loc[last_time, j_name]
+                            # تقييم العقد التي يصل إليها الضغط بشكل كافٍ (> 0)
+                            if p_val > 0:
+                                d_lps = junction_demands_lps.get(j_name, 0.0)
+                                satisfied_demand += d_lps
+                    except Exception:
+                        # في حالة حدوث فشل هيدروليكي كامل أو انقطاع رئيسي
+                        satisfied_demand = 0.0
 
+                    satisfied_demand = min(satisfied_demand, base_total_demand)
                     ratio = (satisfied_demand / base_total_demand * 100.0) if base_total_demand > 0 else 0.0
                     risk = map_serviceability_to_risk(ratio)
                     
@@ -199,7 +200,7 @@ if uploaded_file is not None:
         <div class="info-box">
             <h3>💡 مصطلحات وتعريفات التحليل الهيدروليكي:</h3>
             <ul>
-                <li><b>Satisfied Demand (الطلب المستوفى):</b> كمية المياه الواصلة للعقد المتصلة هيدروليكياً بالخزان بوحدة LPS.</li>
+                <li><b>Satisfied Demand (الطلب المستوفى):</b> كمية المياه الواصلة للعقد ذات الضغط الموجب هيدروليكياً بوحدة LPS.</li>
                 <li><b>Demand Met Ratio (نسبة تلبية الطلب):</b> النسبة المئوية للمياه الواصلة مقارنة بالطلب الإجمالي.</li>
                 <li><b>Risk Index (مؤشر الخطورة):</b> قياس الأثر الناتجة عن انقطاع الخط (1: منخفض -> 5: حرج جداً).</li>
             </ul>
