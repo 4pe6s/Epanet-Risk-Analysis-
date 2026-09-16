@@ -17,7 +17,6 @@ st.set_page_config(
 # تحسين تصميم الواجهة باستخدام CSS مخصص
 st.markdown("""
 <style>
-    /* خلفية التطبيق وتنسيق النصوص */
     .main {
         background-color: #F8FAFC;
     }
@@ -34,13 +33,12 @@ st.markdown("""
         font-size: 1.15rem;
         margin-bottom: 25px;
     }
-    /* بطاقات المعلومات */
     .metric-card {
         background-color: #FFFFFF;
-        padding: 18px;
-        border-radius: 12px;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-        border-left: 5px solid #2563EB;
+        padding: 15px;
+        border-radius: 10px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        border: 1px solid #E2E8F0;
         text-align: center;
     }
     .info-box {
@@ -50,14 +48,6 @@ st.markdown("""
         box-shadow: 0 2px 4px rgba(0,0,0,0.05);
         border: 1px solid #E2E8F0;
         margin-top: 25px;
-    }
-    /* جداول النطاقات */
-    .risk-badge {
-        padding: 6px 12px;
-        border-radius: 6px;
-        font-weight: bold;
-        color: white;
-        display: inline-block;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -97,7 +87,7 @@ def get_node_demand_lps(junction, wn_units):
             return total_demand * 1000.0
     return total_demand
 
-# منطقة رفع الملفات
+# منطقة رفع الملفات في الشريط الجانبي
 st.sidebar.header("📁 File Upload & Settings")
 uploaded_file = st.sidebar.file_uploader("Upload EPANET (.inp) File", type=["inp"])
 
@@ -178,6 +168,7 @@ if uploaded_file is not None:
                         "Closed_Pipe": pipe_name,
                         "Satisfied_Demand (LPS)": round(float(satisfied_demand), 2),
                         "Demand_Met_Ratio (%)": f"{round(float(ratio), 2)}%",
+                        "Raw_Ratio": round(float(ratio), 2),
                         "Risk_Index": risk
                     })
                     
@@ -186,21 +177,42 @@ if uploaded_file is not None:
                 status_text.empty()
                 df_results = pd.DataFrame(results)
                 st.session_state["df_results"] = df_results
-                st.success("✅ Pipe Closure Analysis Completed Successfully!")
-                st.dataframe(df_results, use_container_width=True)
+                st.success("✅ Pipe Closure Analysis Completed Successfully! Navigate to 'Risk Index Analysis' tab to see charts.")
+                st.dataframe(df_results[["Closed_Pipe", "Satisfied_Demand (LPS)", "Demand_Met_Ratio (%)", "Risk_Index"]], use_container_width=True)
 
         with tab3:
             st.subheader("📊 Risk Index Classification & Analysis")
             if "df_results" in st.session_state:
                 df_res = st.session_state["df_results"]
                 
-                col_a, col_b = st.columns([1.2, 1])
+                # حساب التكرار لكل مؤشر خطورة (1 إلى 5)
+                risk_counts = df_res["Risk_Index"].value_counts().reindex([1, 2, 3, 4, 5], fill_value=0)
+                
+                # عرض بطاقات ملخص للعدادات أفقياً
+                st.markdown("##### 🔢 Pipes Count per Risk Index Level")
+                m_cols = st.columns(5)
+                colors_hex = ['#2563EB', '#38BDF8', '#EAB308', '#F97316', '#DC2626']
+                
+                for i in range(1, 6):
+                    with m_cols[i-1]:
+                        st.markdown(
+                            f"<div style='background-color:{colors_hex[i-1]}; padding: 10px; border-radius: 8px; text-align: center; color: white; font-weight: bold;'>"
+                            f"<div style='font-size: 0.9rem;'>Risk {i}</div>"
+                            f"<div style='font-size: 1.8rem;'>{risk_counts[i]}</div>"
+                            f"</div>",
+                            unsafe_allow_html=True
+                        )
+                
+                st.write("")
+                col_a, col_b = st.columns([1.1, 1])
+                
                 with col_a:
                     st.markdown("### 📝 Results Table")
-                    st.dataframe(df_res[["Closed_Pipe", "Satisfied_Demand (LPS)", "Demand_Met_Ratio (%)", "Risk_Index"]], use_container_width=True)
+                    st.dataframe(df_res[["Closed_Pipe", "Satisfied_Demand (LPS)", "Demand_Met_Ratio (%)", "Risk_Index"]], use_container_width=True, height=400)
                 
                 with col_b:
-                    st.markdown("### 📈 Risk Category Breakdown")
+                    st.markdown("### 📈 Risk Index Distribution Chart")
+                    
                     color_map = {
                         1: '#2563EB', # أزرق
                         2: '#38BDF8', # أزرق فاتح
@@ -209,22 +221,35 @@ if uploaded_file is not None:
                         5: '#DC2626'  # أحمر
                     }
                     
-                    counts = df_res["Risk_Index"].value_counts().sort_index()
-                    bar_colors = [color_map.get(idx, '#2563EB') for idx in counts.index]
+                    bar_colors = [color_map[idx] for idx in range(1, 6)]
                     
-                    fig2, ax2 = plt.subplots(figsize=(6, 4))
-                    bars = ax2.bar(counts.index.astype(str), counts.values, color=bar_colors, edgecolor='black', linewidth=0.5)
-                    ax2.set_xlabel("Risk Index Category (1 to 5)", fontsize=10, fontweight='bold')
-                    ax2.set_ylabel("Number of Pipes", fontsize=10, fontweight='bold')
-                    ax2.grid(axis='y', linestyle='--', alpha=0.7)
+                    # إنشاء رسم بياني احترافي مع إظهار القيم فوق الأعمدة
+                    fig2, ax2 = plt.subplots(figsize=(6, 4.5))
+                    x_labels = [f"Risk {i}" for i in range(1, 6)]
+                    y_values = [risk_counts[i] for i in range(1, 6)]
+                    
+                    bars = ax2.bar(x_labels, y_values, color=bar_colors, edgecolor='black', linewidth=0.8, width=0.6)
+                    
+                    ax2.set_xlabel("Risk Index Category (1 to 5)", fontsize=11, fontweight='bold', labelpad=8)
+                    ax2.set_ylabel("Count of Pipes", fontsize=11, fontweight='bold', labelpad=8)
+                    ax2.set_title("Distribution of Pipes by Risk Level", fontsize=12, fontweight='bold', pad=12)
+                    ax2.grid(axis='y', linestyle='--', alpha=0.5)
+                    
+                    # وضع أرقام العدادات بوضوح فوق كل عمود
+                    max_y = max(y_values) if max(y_values) > 0 else 1
+                    ax2.set_ylim(0, max_y * 1.2)  # مساحة إضافية لأرقام القمم
                     
                     for bar in bars:
-                        yval = bar.get_height()
-                        ax2.text(bar.get_x() + bar.get_width()/2, yval + 0.1, int(yval), ha='center', va='bottom', fontweight='bold')
+                        height = bar.get_height()
+                        ax2.annotate(f'{int(height)}',
+                                     xy=(bar.get_x() + bar.get_width() / 2, height),
+                                     xytext=(0, 4),  # إزاحة للأعلى بـ 4 نقاط
+                                     textcoords="offset points",
+                                     ha='center', va='bottom', fontsize=11, fontweight='bold', color='#0F172A')
                         
                     st.pyplot(fig2)
             else:
-                st.info("💡 يرجى تشغيل المحاكاة من تبويب (Sequential Closure Simulation) أولاً لعرض نتائج مؤشر الخطورة.")
+                st.info("💡 يرجى تشغيل المحاكاة من تبويب (Sequential Closure Simulation) أولاً لعرض النتائج والرسم البياني.")
 
         # قسم شرح مستويات ورينج مؤشر الخطورة (Risk Index Criteria)
         st.markdown("---")
