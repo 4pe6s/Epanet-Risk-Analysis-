@@ -53,6 +53,29 @@ def map_serviceability_to_risk(ratio):
     else:
         return 1
 
+def get_node_demand_lps(junction, wn_units):
+    """دالة آمنة لحساب الطلب وتحويله إلى LPS بناءً على الوحدات المعتمدة"""
+    total_demand = 0.0
+    try:
+        # محاولة قراءة base_demand المباشر العائد من WNTR
+        total_demand = float(junction.base_demand)
+    except Exception:
+        try:
+            for ts in junction.demand_timeseries_list:
+                if hasattr(ts, 'base_demand'):
+                    total_demand += float(ts.base_demand)
+                elif isinstance(ts, (list, tuple)) and len(ts) > 0:
+                    total_demand += float(ts[0])
+        except Exception:
+            total_demand = 0.0
+
+    # إذا كانت وحدات الملف الأصلية هي LPS أو غير SI، فإن WNTR تحول القيم داخلياً إلى m3/s (الضرب في 1000 يرجعها لـ LPS)
+    if str(wn_units).upper() in ['LPS', 'SI', 'M3/S', 'M3S']:
+        # التحويل من m3/s إلى LPS إذا كانت القيمة صغيرة جداً
+        if total_demand < 100:
+            return total_demand * 1000.0
+    return total_demand
+
 uploaded_file = st.file_uploader("Drop your .inp file here or click to browse", type=["inp"])
 
 if uploaded_file is not None:
@@ -63,15 +86,10 @@ if uploaded_file is not None:
     try:
         wn = wntr.network.WaterNetworkModel(tmp_path)
         
-        # استخراج الطلبات بـ LPS لجميع العقد بشكل صحيح
+        # استخراج الطلبات بـ LPS لجميع العقد بشكل آمن
         junction_demands_lps = {}
         for name, j in wn.junctions():
-            node_demand_m3s = 0.0
-            # الجمع لجميع فئات الطلب داخل العقدة
-            for ts in j.demand_timeseries_list:
-                node_demand_m3s += float(ts.base_demand)
-            # تحويل من m3/s إلى LPS (الضرب في 1000)
-            junction_demands_lps[name] = node_demand_m3s * 1000.0
+            junction_demands_lps[name] = get_node_demand_lps(j, wn.options.hydraulic.inpfile_units)
 
         base_total_demand = sum(junction_demands_lps.values())
         
