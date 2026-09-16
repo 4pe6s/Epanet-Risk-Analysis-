@@ -13,10 +13,10 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# تخصيص واجهة المستخدم، إصلاح ألوان الجداول، وضمان وضوح الرموز والنصوص
+# تخصيص واجهة المستخدم، إخفاء أدوات المنصة، وضمان وضوح الرموز والنصوص
 st.markdown("""
 <style>
-    /* إخفاء شريط أدوات ستريامليت العلوي وأزرار النشر */
+    /* إخفاء شريط أدوات ستريامليت العلوي وزر Manage app بالكامل */
     #MainMenu {visibility: hidden;}
     header {visibility: hidden;}
     footer {visibility: hidden;}
@@ -69,7 +69,6 @@ st.markdown("""
         box-shadow: 0 4px 6px -1px rgba(2, 132, 199, 0.3);
     }
     
-    /* ضمان وضوح النصوص والرموز داخل الجداول والجوال */
     table, th, td {
         color: #0F172A !important;
     }
@@ -111,18 +110,7 @@ def get_node_demand_lps(junction, wn_units):
     return total_demand
 
 st.sidebar.header("📁 File Upload & Settings")
-uploaded_file_sidebar = st.sidebar.file_uploader("Upload EPANET (.inp) File", type=["inp"], key="sidebar_uploader")
-
-# دعم رفع الملف من الشاشة الرئيسية (مفيد جداً للاستخدام عبر الجوال)
-uploaded_file = uploaded_file_sidebar
-if uploaded_file is None:
-    st.markdown("---")
-    col_up1, col_up2, col_up3 = st.columns([1, 2, 1])
-    with col_up2:
-        st.info("📱 **استخدام الجوال:** يمكنك رفع ملف الـ EPANET مباشرة من هنا إذا لم يظهر الشريط الجانبي بوضوح:")
-        uploaded_file_main = st.file_uploader("Upload EPANET (.inp) File (Mobile Friendly)", type=["inp"], key="main_uploader")
-        if uploaded_file_main is not None:
-            uploaded_file = uploaded_file_main
+uploaded_file = st.sidebar.file_uploader("Upload EPANET (.inp) File", type=["inp"])
 
 if uploaded_file is not None:
     with tempfile.NamedTemporaryFile(delete=False, suffix=".inp") as tmp_file:
@@ -265,17 +253,17 @@ if uploaded_file is not None:
 
         with tab3:
             st.subheader("🔍 EPANET-Style Node Diagnostics & Pressure Analysis")
-            st.write("استعراض جدول النودز بالتفصيل لكل أنبوب مغلق (مطابق لجدول Node Table في برنامج EPANET).")
+            st.write("استعراض جدول العقد بالتفصيل لكل أنبوب مغلق (مطابق لجدول Node Table في برنامج EPANET).")
             
             if "detailed_node_results" in st.session_state:
                 detailed_dict = st.session_state["detailed_node_results"]
-                selected_pipe = st.selectbox("اختر الأنبوب المغلق لعرض جدول النودز الخاص به:", list(detailed_dict.keys()))
+                selected_pipe = st.selectbox("اختر الأنبوب المغلق لعرض جدول العقد الخاص به:", list(detailed_dict.keys()))
                 
                 if selected_pipe:
                     st.markdown(f"**Network Table - Nodes (When Pipe `{selected_pipe}` is Closed):**")
                     st.dataframe(detailed_dict[selected_pipe], use_container_width=True, height=500)
             else:
-                st.info("💡 يرجى تشغيل المحاكاة من تبويب (Sequential Closure Simulation) أولاً لتوليد جداول النودز.")
+                st.info("💡 يرجى تشغيل المحاكاة من تبويب (Sequential Closure Simulation) أولاً لتوليد جداول العقد.")
 
         with tab4:
             st.subheader("📊 Risk Index Classification & Analysis")
@@ -337,13 +325,12 @@ if uploaded_file is not None:
         st.markdown("---")
         st.markdown("### 🏷️ Risk Index Assessment Criteria & Ranges")
         
-        # استخدام صيغة HTML واضحة ومباشرة لرموز الأكبر من والنسب المئوية لضمان عدم اختفائها نهائياً
         range_data = [
-            {"Risk Index": "Risk 1 (Very Low Risk)", "Demand Met Range (%)": "> 80.0%", "Description": "تلبية سعة الشبكة عالية جداً وتأثير الإغلاق طفيف جداً على المستخدمين."},
+            {"Risk Index": "Risk 1 (Very Low Risk)", "Demand Met Range (%)": "أكبر من 80.0%", "Description": "تلبية سعة الشبكة عالية جداً وتأثير الإغلاق طفيف جداً على المستخدمين."},
             {"Risk Index": "Risk 2 (Low Risk)", "Demand Met Range (%)": "70.1% - 80.0%", "Description": "تأثير محلي محدود، معظم الشبكة تعمل بضغوط كافية."},
             {"Risk Index": "Risk 3 (Moderate Risk)", "Demand Met Range (%)": "60.1% - 70.0%", "Description": "انخفاض متوسط في الضغوط وانقطاع جزئي في بعض المناطق الحيوية."},
             {"Risk Index": "Risk 4 (High Risk)", "Demand Met Range (%)": "50.1% - 60.0%", "Description": "انخفاض حاد في ضغط المياه وتأثر قطاع واسع من مستهلكي الشبكة."},
-            {"Risk Index": "Risk 5 (Critical Risk)", "Demand Met Range (%)": "≤ 50.0%", "Description": "فشل هيدروليكي حرج، الانقطاع يطال غالبية أجزاء الشبكة أو خط رئيسي."}
+            {"Risk Index": "Risk 5 (Critical Risk)", "Demand Met Range (%)": "أقل أو يساوي 50.0%", "Description": "فشل هيدروليكي حرج، الانقطاع يطال غالبية أجزاء الشبكة أو خط رئيسي."}
         ]
         
         st.table(pd.DataFrame(range_data))
@@ -352,4 +339,4 @@ if uploaded_file is not None:
         if os.path.exists(tmp_path):
             os.remove(tmp_path)
 else:
-    st.info("👈 Please upload an EPANET `.inp` file from the sidebar or using the uploader box above to start the analysis.")
+    st.info("👈 Please upload an EPANET `.inp` file from the sidebar to start the analysis.")
