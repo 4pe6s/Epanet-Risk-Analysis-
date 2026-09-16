@@ -6,7 +6,6 @@ import wntr
 import tempfile
 import os
 
-# إعداد الصفحة وتعيين الثيم العام
 st.set_page_config(
     page_title="EPANET Hydraulic & Risk Assessment Suite",
     page_icon="💧",
@@ -14,15 +13,12 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# تحسين تصميم الواجهة باستخدام CSS مخصص
 st.markdown("""
 <style>
-    .main {
-        background-color: #F8FAFC;
-    }
+    .main { background-color: #F8FAFC; }
     .main-title {
         color: #0F172A;
-        font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        font-family: 'Segoe UI', Roboto, sans-serif;
         font-weight: 800;
         text-align: center;
         margin-bottom: 5px;
@@ -33,28 +29,11 @@ st.markdown("""
         font-size: 1.15rem;
         margin-bottom: 25px;
     }
-    .metric-card {
-        background-color: #FFFFFF;
-        padding: 15px;
-        border-radius: 10px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-        border: 1px solid #E2E8F0;
-        text-align: center;
-    }
-    .info-box {
-        background-color: #FFFFFF;
-        padding: 20px;
-        border-radius: 12px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-        border: 1px solid #E2E8F0;
-        margin-top: 25px;
-    }
 </style>
 """, unsafe_allow_html=True)
 
-# الهيدر الرئيسي
 st.markdown("<h1 class='main-title'>💧 EPANET Hydraulic & Risk Assessment Suite</h1>", unsafe_allow_html=True)
-st.markdown("<p class='sub-title'>Advanced Sequential Pipe Failure Simulation & Criticality Mapping</p>", unsafe_allow_html=True)
+st.markdown("<p class='sub-title'>Advanced Sequential Pipe Failure Simulation & Node Diagnostics</p>", unsafe_allow_html=True)
 
 def map_serviceability_to_risk(ratio):
     if ratio <= 50.0:
@@ -87,7 +66,6 @@ def get_node_demand_lps(junction, wn_units):
             return total_demand * 1000.0
     return total_demand
 
-# منطقة رفع الملفات في الشريط الجانبي
 st.sidebar.header("📁 File Upload & Settings")
 uploaded_file = st.sidebar.file_uploader("Upload EPANET (.inp) File", type=["inp"])
 
@@ -105,7 +83,6 @@ if uploaded_file is not None:
 
         base_total_demand = sum(junction_demands_lps.values())
         
-        # كروت ملخص الشبكة الفنية
         col1, col2, col3, col4 = st.columns(4)
         with col1:
             st.metric("Total Nodes", f"{len(list(wn.junctions()))}")
@@ -129,7 +106,7 @@ if uploaded_file is not None:
 
         with tab2:
             st.subheader("⚡ Simulate Pipe Failures (Sequential Closure)")
-            st.write("Calculates exact hydraulic availability by evaluating pressure drop and demand coverage for each closed pipe.")
+            st.write("Calculates exact hydraulic availability & tracks negative pressure and unmet demands per node.")
             
             if st.button("🚀 Run Exact Pipe Failure Analysis", type="primary", use_container_width=True):
                 results = []
@@ -144,6 +121,10 @@ if uploaded_file is not None:
                     pipe_to_close = wn_sim.get_link(pipe_name)
                     pipe_to_close.initial_status = wntr.network.LinkStatus.Closed
                     
+                    negative_nodes_info = []
+                    unmet_nodes_info = []
+                    satisfied_demand = 0.0
+
                     try:
                         sim = wntr.sim.EpanetSimulator(wn_sim)
                         sim_results = sim.run_sim()
@@ -151,24 +132,35 @@ if uploaded_file is not None:
                         pressure_df = sim_results.node['pressure']
                         last_time = pressure_df.index[-1]
                         
-                        satisfied_demand = 0.0
                         for j_name in wn_sim.junction_name_list:
                             p_val = pressure_df.loc[last_time, j_name]
                             d_lps = junction_demands_lps.get(j_name, 0.0)
+                            
                             if p_val > 0:
                                 satisfied_demand += d_lps
+                            else:
+                                negative_nodes_info.append(f"{j_name} ({p_val:.2f} m)")
+                                if d_lps > 0:
+                                    unmet_nodes_info.append(f"{j_name} ({d_lps:.2f} LPS)")
+
                     except Exception:
                         satisfied_demand = 0.0
+                        negative_nodes_info = ["Simulation Failed"]
+                        unmet_nodes_info = ["All Nodes Cut"]
 
                     satisfied_demand = min(satisfied_demand, base_total_demand)
                     ratio = (satisfied_demand / base_total_demand * 100.0) if base_total_demand > 0 else 0.0
                     risk = map_serviceability_to_risk(ratio)
                     
+                    neg_str = ", ".join(negative_nodes_info) if negative_nodes_info else "None"
+                    unmet_str = ", ".join(unmet_nodes_info) if unmet_nodes_info else "None"
+                    
                     results.append({
                         "Closed_Pipe": pipe_name,
                         "Satisfied_Demand (LPS)": round(float(satisfied_demand), 2),
                         "Demand_Met_Ratio (%)": f"{round(float(ratio), 2)}%",
-                        "Raw_Ratio": round(float(ratio), 2),
+                        "Negative_Pressure_Nodes": neg_str,
+                        "Unmet_Demand_Nodes": unmet_str,
                         "Risk_Index": risk
                     })
                     
@@ -177,19 +169,16 @@ if uploaded_file is not None:
                 status_text.empty()
                 df_results = pd.DataFrame(results)
                 st.session_state["df_results"] = df_results
-                st.success("✅ Pipe Closure Analysis Completed Successfully! Navigate to 'Risk Index Analysis' tab to see charts.")
-                st.dataframe(df_results[["Closed_Pipe", "Satisfied_Demand (LPS)", "Demand_Met_Ratio (%)", "Risk_Index"]], use_container_width=True)
+                st.success("✅ Pipe Closure Analysis Completed Successfully!")
+                st.dataframe(df_results, use_container_width=True)
 
         with tab3:
             st.subheader("📊 Risk Index Classification & Analysis")
             if "df_results" in st.session_state:
                 df_res = st.session_state["df_results"]
                 
-                # حساب التكرار لكل مؤشر خطورة (1 إلى 5)
                 risk_counts = df_res["Risk_Index"].value_counts().reindex([1, 2, 3, 4, 5], fill_value=0)
                 
-                # عرض بطاقات ملخص للعدادات أفقياً
-                st.markdown("##### 🔢 Pipes Count per Risk Index Level")
                 m_cols = st.columns(5)
                 colors_hex = ['#2563EB', '#38BDF8', '#EAB308', '#F97316', '#DC2626']
                 
@@ -204,54 +193,40 @@ if uploaded_file is not None:
                         )
                 
                 st.write("")
-                col_a, col_b = st.columns([1.1, 1])
+                col_a, col_b = st.columns([1.3, 1])
                 
                 with col_a:
-                    st.markdown("### 📝 Results Table")
-                    st.dataframe(df_res[["Closed_Pipe", "Satisfied_Demand (LPS)", "Demand_Met_Ratio (%)", "Risk_Index"]], use_container_width=True, height=400)
+                    st.markdown("### 📝 Results Table with Node Data")
+                    st.dataframe(df_res[["Closed_Pipe", "Satisfied_Demand (LPS)", "Demand_Met_Ratio (%)", "Negative_Pressure_Nodes", "Unmet_Demand_Nodes", "Risk_Index"]], use_container_width=True, height=400)
                 
                 with col_b:
                     st.markdown("### 📈 Risk Index Distribution Chart")
-                    
-                    color_map = {
-                        1: '#2563EB', # أزرق
-                        2: '#38BDF8', # أزرق فاتح
-                        3: '#EAB308', # أصفر
-                        4: '#F97316', # برتقالي
-                        5: '#DC2626'  # أحمر
-                    }
-                    
+                    color_map = {1: '#2563EB', 2: '#38BDF8', 3: '#EAB308', 4: '#F97316', 5: '#DC2626'}
                     bar_colors = [color_map[idx] for idx in range(1, 6)]
                     
-                    # إنشاء رسم بياني احترافي مع إظهار القيم فوق الأعمدة
                     fig2, ax2 = plt.subplots(figsize=(6, 4.5))
                     x_labels = [f"Risk {i}" for i in range(1, 6)]
                     y_values = [risk_counts[i] for i in range(1, 6)]
                     
                     bars = ax2.bar(x_labels, y_values, color=bar_colors, edgecolor='black', linewidth=0.8, width=0.6)
-                    
                     ax2.set_xlabel("Risk Index Category (1 to 5)", fontsize=11, fontweight='bold', labelpad=8)
                     ax2.set_ylabel("Count of Pipes", fontsize=11, fontweight='bold', labelpad=8)
                     ax2.set_title("Distribution of Pipes by Risk Level", fontsize=12, fontweight='bold', pad=12)
                     ax2.grid(axis='y', linestyle='--', alpha=0.5)
                     
-                    # وضع أرقام العدادات بوضوح فوق كل عمود
                     max_y = max(y_values) if max(y_values) > 0 else 1
-                    ax2.set_ylim(0, max_y * 1.2)  # مساحة إضافية لأرقام القمم
+                    ax2.set_ylim(0, max_y * 1.2)
                     
                     for bar in bars:
                         height = bar.get_height()
                         ax2.annotate(f'{int(height)}',
                                      xy=(bar.get_x() + bar.get_width() / 2, height),
-                                     xytext=(0, 4),  # إزاحة للأعلى بـ 4 نقاط
+                                     xytext=(0, 4),
                                      textcoords="offset points",
                                      ha='center', va='bottom', fontsize=11, fontweight='bold', color='#0F172A')
                         
                     st.pyplot(fig2)
-            else:
-                st.info("💡 يرجى تشغيل المحاكاة من تبويب (Sequential Closure Simulation) أولاً لعرض النتائج والرسم البياني.")
 
-        # قسم شرح مستويات ورينج مؤشر الخطورة (Risk Index Criteria)
         st.markdown("---")
         st.markdown("### 🏷️ Risk Index Assessment Criteria & Ranges")
         
