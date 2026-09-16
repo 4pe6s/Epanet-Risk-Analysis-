@@ -6,7 +6,6 @@ import networkx as nx
 import wntr
 import tempfile
 import os
-import re
 
 st.set_page_config(
     page_title="EPANET Hydraulic Simulation Suite",
@@ -40,7 +39,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.markdown("<h1 class='main-title'>💧 EPANET Hydraulic Simulation Suite</h1>", unsafe_allow_html=True)
-st.markdown("<p class='sub-title'>Exact Hydraulic Pipe Closure Analysis with WNTR & Raw INP Parser</p>", unsafe_allow_html=True)
+st.markdown("<p class='sub-title'>Exact Hydraulic Pipe Closure Analysis (LPS Units)</p>", unsafe_allow_html=True)
 
 def map_serviceability_to_risk(ratio):
     if ratio <= 50.0:
@@ -54,58 +53,26 @@ def map_serviceability_to_risk(ratio):
     else:
         return 1
 
-def parse_inp_demands_and_pipes(file_content):
-    """قراءة قيم الاستهلاك مباشرة من نص ملف INP لتفادي خطأ تحويل الوحدات في WNTR"""
-    lines = file_content.decode('utf-8', errors='ignore').splitlines()
-    junction_demands = {}
-    current_section = None
-    
-    for line in lines:
-        line = line.strip()
-        if not line or line.startswith(';'):
-            continue
-        if line.startswith('[') and line.endswith(']'):
-            current_section = line.upper()
-            continue
-            
-        if current_section == '[JUNCTIONS]':
-            parts = line.split()
-            if len(parts) >= 2:
-                j_id = parts[0]
-                try:
-                    demand = float(parts[1])
-                    junction_demands[j_id] = junction_demands.get(j_id, 0.0) + demand
-                except ValueError:
-                    pass
-        elif current_section == '[DEMANDS]':
-            parts = line.split()
-            if len(parts) >= 2:
-                j_id = parts[0]
-                try:
-                    demand = float(parts[1])
-                    junction_demands[j_id] = junction_demands.get(j_id, 0.0) + demand
-                except ValueError:
-                    pass
-                    
-    return junction_demands
-
 uploaded_file = st.file_uploader("Drop your .inp file here or click to browse", type=["inp"])
 
 if uploaded_file is not None:
-    file_bytes = uploaded_file.getvalue()
-    raw_demands = parse_inp_demands_and_pipes(file_bytes)
-    
     with tempfile.NamedTemporaryFile(delete=False, suffix=".inp") as tmp_file:
-        tmp_file.write(file_bytes)
+        tmp_file.write(uploaded_file.getvalue())
         tmp_path = tmp_file.name
 
     try:
         wn = wntr.network.WaterNetworkModel(tmp_path)
         
-        # حساب إجمالي الطلب من القراءة المباشرة
-        base_total_demand = sum(raw_demands.values()) if raw_demands else sum(j.base_demand for name, j in wn.junctions())
+        # استخراج الطلبات بـ LPS (مجموع كافة فئات الطلب لكل عقدة)
+        junction_demands_lps = {}
+        for name, j in wn.junctions():
+            # تحويل الوحدة من m3/s الخاصة بـ WNTR إلى LPS المعتمدة لديك
+            d_lps = float(j.demand_timeseries_list.base_demand) * 1000.0
+            junction_demands_lps[name] = d_lps
+
+        base_total_demand = sum(junction_demands_lps.values())
         
-        st.success("File uploaded and loaded successfully!")
+        st.success("File uploaded successfully!")
         
         col1, col2, col3, col4 = st.columns(4)
         with col1:
@@ -155,16 +122,16 @@ if uploaded_file is not None:
                             connected_to_source.update(connected_nodes)
                     
                     satisfied_demand = 0.0
-                    for j_name in raw_demands:
+                    for j_name, d_val in junction_demands_lps.items():
                         if j_name in connected_to_source:
-                            satisfied_demand += raw_demands[j_name]
+                            satisfied_demand += d_val
 
                     ratio = (satisfied_demand / base_total_demand * 100.0) if base_total_demand > 0 else 0.0
                     risk = map_serviceability_to_risk(ratio)
                     
                     results.append({
                         "Closed_Pipe": pipe_name,
-                        "Satisfied_Demand": round(float(satisfied_demand), 2),
+                        "Satisfied_Demand (LPS)": round(float(satisfied_demand), 2),
                         "Demand_Met_Ratio": round(float(ratio), 2),
                         "Risk_Index": risk
                     })
@@ -184,7 +151,7 @@ if uploaded_file is not None:
                 col_a, col_b = st.columns([1, 1])
                 with col_a:
                     st.subheader("Risk Distribution Table")
-                    st.dataframe(df_res[["Closed_Pipe", "Satisfied_Demand", "Demand_Met_Ratio", "Risk_Index"]], use_container_width=True)
+                    st.dataframe(df_res[["Closed_Pipe", "Satisfied_Demand (LPS)", "Demand_Met_Ratio", "Risk_Index"]], use_container_width=True)
                 
                 with col_b:
                     st.subheader("Risk Category Breakdown")
@@ -212,17 +179,9 @@ if uploaded_file is not None:
         <div class="info-box">
             <h3>💡 مصطلحات وتعريفات التحليل الهيدروليكي:</h3>
             <ul>
-                <li><b>Satisfied Demand (الطلب المستوفى):</b> كمية المياه الفعلية الواصلة للعقد المتصلة بالخزان عند إغلاق الأنبوب المذكور.</li>
-                <li><b>Demand Met Ratio (نسبة تلبية الطلب):</b> النسبة المئوية للمياه الواصلة مقارنة بالطلب الإجمالي. عند إغلاق أنبوب ناقل رئيسي وتوقف التغذية تماماً تظهر النسبة <b>0.0%</b>.</li>
-                <li><b>Risk Index (مؤشر الخطورة):</b>
-                    <ul>
-                        <li><span style="color: #2563EB; font-weight: bold;">1 (أزرق):</span> تلبية الطلب > 80%.</li>
-                        <li><span style="color: #38BDF8; font-weight: bold;">2 (سماوي):</span> تلبية الطلب 70% - 80%.</li>
-                        <li><span style="color: #EAB308; font-weight: bold;">3 (أصفر):</span> تلبية الطلب 60% - 70%.</li>
-                        <li><span style="color: #F97316; font-weight: bold;">4 (برتقالي):</span> تلبية الطلب 50% - 60%.</li>
-                        <li><span style="color: #DC2626; font-weight: bold;">5 (أحمر):</span> تلبية الطلب ≤ 50% (انقطاع حرج).</li>
-                    </ul>
-                </li>
+                <li><b>Satisfied Demand (الطلب المستوفى):</b> كمية المياه الفعلية الواصلة للعقد المتصلة بالخزان بوحدة LPS.</li>
+                <li><b>Demand Met Ratio (نسبة تلبية الطلب):</b> النسبة المئوية للمياه الواصلة مقارنة بالطلب الإجمالي.</li>
+                <li><b>Risk Index (مؤشر الخطورة):</b> من 1 (منخفض) إلى 5 (حرج).</li>
             </ul>
         </div>
         """, unsafe_allow_html=True)
