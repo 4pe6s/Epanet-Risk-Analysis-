@@ -13,16 +13,18 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# تخصيص واجهة المستخدم بدرجات السماوي والمياه، وإخفاء أزرار الـ Fork و GitHub وشريط ستريامليت العلوي
+# تخصيص واجهة المستخدم بدرجات السماوي والمياه، وإخفاء أزرار الـ Fork و GitHub و Manage app و شريط ستريامليت
 st.markdown("""
 <style>
-    /* إخفاء شريط أدوات ستريامليت العلوي وأزرار الـ Fork و GitHub و Menu بالكامل */
+    /* إخفاء شريط أدوات ستريامليت العلوي، أزرار النشر، وزر Manage app بالكامل */
     #MainMenu {visibility: hidden;}
     header {visibility: hidden;}
     footer {visibility: hidden;}
     .stAppToolbar {display: none !important;}
     [data-testid="stDecoration"] {display: none !important;}
     [data-testid="stStatusWidget"] {display: none !important;}
+    [data-testid="stAppDeployButton"] {display: none !important;}
+    .stAppDeployButton {display: none !important;}
 
     /* خلفية عامة بتدرجات مائية هادئة وفخمة */
     .main {
