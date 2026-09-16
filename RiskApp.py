@@ -33,7 +33,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.markdown("<h1 class='main-title'>💧 EPANET Hydraulic & Risk Assessment Suite</h1>", unsafe_allow_html=True)
-st.markdown("<p class='sub-title'>Advanced Sequential Pipe Failure Simulation & Dedicated Node Diagnostics</p>", unsafe_allow_html=True)
+st.markdown("<p class='sub-title'>Advanced Sequential Pipe Failure Simulation & Exact EPANET Node Diagnostics</p>", unsafe_allow_html=True)
 
 def map_serviceability_to_risk(ratio):
     if ratio <= 50.0:
@@ -96,7 +96,6 @@ if uploaded_file is not None:
             
         st.divider()
         
-        # تقسيم الواجهة إلى 4 تبويبات رئيسية لتنظيم العمل بالكامل
         tab1, tab2, tab3, tab4 = st.tabs([
             "🌐 Network Overview", 
             "⚡ Sequential Closure Simulation", 
@@ -117,6 +116,7 @@ if uploaded_file is not None:
             
             if st.button("🚀 Run Exact Pipe Failure Analysis", type="primary", use_container_width=True):
                 results = []
+                detailed_node_results = {}
                 progress_bar = st.progress(0)
                 status_text = st.empty()
                 total_pipes = len(pipes_list)
@@ -131,29 +131,56 @@ if uploaded_file is not None:
                     negative_nodes_info = []
                     unmet_nodes_info = []
                     satisfied_demand = 0.0
+                    node_table_data = []
 
                     try:
                         sim = wntr.sim.EpanetSimulator(wn_sim)
                         sim_results = sim.run_sim()
                         
                         pressure_df = sim_results.node['pressure']
+                        head_df = sim_results.node['head']
+                        demand_df = sim_results.node['demand']
                         last_time = pressure_df.index[-1]
+                        
+                        wn_units = wn_sim.options.hydraulic.inpfile_units
                         
                         for j_name in wn_sim.junction_name_list:
                             p_val = pressure_df.loc[last_time, j_name]
-                            d_lps = junction_demands_lps.get(j_name, 0.0)
+                            h_val = head_df.loc[last_time, j_name]
+                            d_val = demand_df.loc[last_time, j_name]
+                            
+                            # تحويل الوحدات لـ LPS إذا لزم الأمر مثل الدالة المساعدة
+                            d_lps = d_val
+                            if str(wn_units).upper() in ['LPS', 'SI', 'M3/S', 'M3S'] and d_val < 100 and d_val > 0:
+                                d_lps = d_val * 1000.0
+                            
+                            base_d = junction_demands_lps.get(j_name, 0.0)
                             
                             if p_val > 0:
-                                satisfied_demand += d_lps
+                                satisfied_demand += base_d
                             else:
                                 negative_nodes_info.append(f"{j_name} ({p_val:.2f} m)")
-                                if d_lps > 0:
-                                    unmet_nodes_info.append(f"{j_name} ({d_lps:.2f} LPS)")
+                                if base_d > 0:
+                                    unmet_nodes_info.append(f"{j_name} ({base_d:.2f} LPS)")
+
+                            node_table_data.append({
+                                "Node ID": j_name,
+                                "Demand (LPS)": round(float(d_lps), 2),
+                                "Head (m)": round(float(h_val), 2),
+                                "Pressure (m)": round(float(p_val), 2)
+                            })
 
                     except Exception:
                         satisfied_demand = 0.0
                         negative_nodes_info = ["Simulation Failed"]
                         unmet_nodes_info = ["All Nodes Cut"]
+                        for j_name in wn_sim.junction_name_list:
+                            node_table_data.append({
+                                "Node ID": j_name,
+                                "Demand (LPS)": 0.0,
+                                "Head (m)": 0.0,
+                                "Pressure (m)": 0.0
+                            })
 
                     satisfied_demand = min(satisfied_demand, base_total_demand)
                     ratio = (satisfied_demand / base_total_demand * 100.0) if base_total_demand > 0 else 0.0
@@ -171,35 +198,30 @@ if uploaded_file is not None:
                         "Risk_Index": risk
                     })
                     
+                    detailed_node_results[pipe_name] = pd.DataFrame(node_table_data)
                     progress_bar.progress((idx + 1) / total_pipes)
                 
                 status_text.empty()
                 df_results = pd.DataFrame(results)
                 st.session_state["df_results"] = df_results
-                st.success("✅ Pipe Closure Analysis Completed Successfully! Check the other tabs for detailed diagnostics and charts.")
+                st.session_state["detailed_node_results"] = detailed_node_results
+                st.success("✅ Pipe Closure Analysis Completed Successfully! Check the Diagnostics and Risk tabs.")
                 
-                # الجدول المختصر في تبويب السيكويشل كلوزر
                 st.dataframe(df_results[["Closed_Pipe", "Satisfied_Demand (LPS)", "Demand_Met_Ratio (%)", "Risk_Index"]], use_container_width=True)
 
         with tab3:
-            st.subheader("🔍 Dedicated Node Diagnostics & Pressure Analysis")
-            st.write("استعراض تفصيلي للعُقد المتأثرة، الضغوط السالبة، والطلبات غير المستوفاة عند إغلاق كل أنبوب.")
+            st.subheader("🔍 EPANET-Style Node Diagnostics & Pressure Analysis")
+            st.write("استعراض جدول النودز بالتفصيل لكل أنبوب مغلق (مطابق لجدول Node Table في برنامج EPANET).")
             
-            if "df_results" in st.session_state:
-                df_res = st.session_state["df_results"]
+            if "detailed_node_results" in st.session_state:
+                detailed_dict = st.session_state["detailed_node_results"]
+                selected_pipe = st.selectbox("اختر الأنبوب المغلق لعرض جدول النودز الخاص به:", list(detailed_dict.keys()))
                 
-                # جدول مفصل مستقل بالكامل يعرض معلومات النودز قبل الريسك انديكس
-                columns_order = [
-                    "Closed_Pipe", 
-                    "Satisfied_Demand (LPS)", 
-                    "Demand_Met_Ratio (%)", 
-                    "Negative_Pressure_Nodes", 
-                    "Unmet_Demand_Nodes", 
-                    "Risk_Index"
-                ]
-                st.dataframe(df_res[columns_order], use_container_width=True, height=500)
+                if selected_pipe:
+                    st.markdown(f"**Network Table - Nodes (When Pipe `{selected_pipe}` is Closed):**")
+                    st.dataframe(detailed_dict[selected_pipe], use_container_width=True, height=500)
             else:
-                st.info("💡 يرجى تشغيل المحاكاة من تبويب (Sequential Closure Simulation) أولاً لتوليد بيانات تشخيص العُقد.")
+                st.info("💡 يرجى تشغيل المحاكاة من تبويب (Sequential Closure Simulation) أولاً لتوليد جداول النودز.")
 
         with tab4:
             st.subheader("📊 Risk Index Classification & Analysis")
