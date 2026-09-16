@@ -77,8 +77,8 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown("<h1 class='main-title'>💧 EPANET Hydraulic & Risk Assessment Suite</h1>", unsafe_app_html=True)
-st.markdown("<p class='sub-title'>Advanced Sequential Pipe Failure Simulation & Exact EPANET Node Diagnostics</p>", unsafe_app_html=True)
+st.markdown("<h1 class='main-title'>💧 EPANET Hydraulic & Risk Assessment Suite</h1>", unsafe_allow_html=True)
+st.markdown("<p class='sub-title'>Advanced Sequential Pipe Failure Simulation & Exact EPANET Node Diagnostics</p>", unsafe_allow_html=True)
 
 def map_serviceability_to_risk(ratio):
     if ratio <= 50.0:
