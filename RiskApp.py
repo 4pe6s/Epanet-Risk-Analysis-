@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import networkx as nx
 
 st.set_page_config(
     page_title="EPANET Hydraulic Simulation Suite",
@@ -25,6 +24,13 @@ st.markdown("""
         font-size: 1.1rem;
         margin-bottom: 25px;
     }
+    .info-box {
+        background-color: #F3F4F6;
+        padding: 15px;
+        border-radius: 8px;
+        border-right: 5px solid #1E3A8A;
+        margin-top: 25px;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -38,18 +44,15 @@ def parse_inp_file(content):
     
     for line in lines:
         line = line.strip()
-        # تتجاهل السطور الفارغة والتعليقات المبتدئة بـ ;
         if not line or line.startswith(";"):
             continue
             
-        # التنظيف واقتطاع التعليقات العرضية إن وجدت
         if ";" in line:
             line = line.split(";")[0].strip()
             if not line:
                 continue
 
         if line.startswith("[") and "]" in line:
-            # استخلاص اسم المقطع بدقة وتنظيفه من أي تعليقات مجاورة
             raw_sec = line[1:line.index("]")].strip().upper()
             current_section = raw_sec
             sections[current_section] = []
@@ -123,7 +126,8 @@ if uploaded_file is not None:
     
     with tab1:
         st.subheader("Network Summary")
-        st.dataframe(df_p, use_container_width=True)
+        # عرض معلومات الأنابيب بدون العقد التفصيلية
+        st.dataframe(df_p[["ID", "Length", "Status"]], use_container_width=True)
 
     with tab2:
         st.subheader("Simulate Pipe Failures (Sequential Closure)")
@@ -140,8 +144,6 @@ if uploaded_file is not None:
                 
                 results.append({
                     "Closed_Pipe": closed_pipe_id,
-                    "Node_1": pipe["Node1"],
-                    "Node_2": pipe["Node2"],
                     "Satisfied_Demand": round(satisfied_demand, 2),
                     "Demand_Met_Ratio": round(ratio * 100, 2),
                     "Risk_Index": risk
@@ -160,17 +162,51 @@ if uploaded_file is not None:
             col_a, col_b = st.columns([1, 1])
             with col_a:
                 st.subheader("Risk Distribution Table")
-                st.dataframe(df_res, use_container_width=True)
+                st.dataframe(df_res[["Closed_Pipe", "Satisfied_Demand", "Demand_Met_Ratio", "Risk_Index"]], use_container_width=True)
             
             with col_b:
                 st.subheader("Risk Category Breakdown")
+                
+                # تدرج الألوان حسب درجة الخطورة (1 أزرق، 5 أحمر)
+                color_map = {
+                    1: '#2563EB',  # أزرق (خطر منخفض جداً)
+                    2: '#38BDF8',  # سماوي (خطر منخفض)
+                    3: '#EAB308',  # أصفر (خطر متوسط)
+                    4: '#F97316',  # برتقالي (خطر مرتفع)
+                    5: '#DC2626'   # أحمر (خطر شديد جداً)
+                }
+                
+                counts = df_res["Risk_Index"].value_counts().sort_index()
+                bar_colors = [color_map.get(idx, '#2563EB') for idx in counts.index]
+                
                 fig2, ax2 = plt.subplots(figsize=(6, 4))
-                df_res["Risk_Index"].value_counts().sort_index().plot(kind='bar', ax=ax2, color='#DC2626')
-                ax2.set_xlabel("Risk Index (1-5)")
+                bars = ax2.bar(counts.index.astype(str), counts.values, color=bar_colors)
+                ax2.set_xlabel("Risk Index (1: Low Risk -> 5: High Risk)")
                 ax2.set_ylabel("Count of Pipes")
                 ax2.set_title("Pipe Risk Index Histogram")
                 st.pyplot(fig2)
         else:
             st.info("يرجى تشغيل المحاكاة من التبويب الثاني أولاً.")
+
+    # الشرح والتعريفات أسفل الصفحات
+    st.markdown("""
+    <div class="info-box">
+        <h3>💡 مصطلحات وتعريفات التحليل الهيدروليكي:</h3>
+        <ul>
+            <li><b>Satisfied Demand (الطلب المستوفى):</b> يمثل كمية التدفق المائي الفعلية (بوحدة لتر/ثانية) التي تصل للمستهلكين عند إغلاق أنبوب محدد.</li>
+            <li><b>Demand Met Ratio (نسبة تلبية الطلب):</b> النسبة المئوية للمياه الواصلة للشبكة مقارنة بالطلب الكلي المطلوب. كلما انخفضت هذه النسبة، دل ذلك على أن الأنبوب المغلق يشكل شرياناً حيوياً للشبكة.</li>
+            <li><b>Risk Index (مؤشر الخطورة):</b> تصنيف من 1 إلى 5 يحدد مدى تأثير إغلاق الأنبوب على الشبكة:
+                <ul>
+                    <li><span style="color: #2563EB; font-weight: bold;">1 (أزرق):</span> تأثير ضعيف جداً (تلبية الطلب > 80%).</li>
+                    <li><span style="color: #38BDF8; font-weight: bold;">2 (سماوي):</span> تأثير منخفض (تلبية الطلب 70% - 80%).</li>
+                    <li><span style="color: #EAB308; font-weight: bold;">3 (أصفر):</span> تأثير متوسط (تلبية الطلب 60% - 70%).</li>
+                    <li><span style="color: #F97316; font-weight: bold;">4 (برتقالي):</span> تأثير مرتفع (تلبية الطلب 50% - 60%).</li>
+                    <li><span style="color: #DC2626; font-weight: bold;">5 (أحمر):</span> تأثير حرج جداً (تلبية الطلب ≤ 50%).</li>
+                </ul>
+            </li>
+        </ul>
+    </div>
+    """, unsafe_allow_html=True)
+
 else:
     st.info("Please upload an EPANET `.inp` file to start the automated analysis.")
