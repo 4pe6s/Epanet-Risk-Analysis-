@@ -10,12 +10,22 @@ st.set_page_config(
     page_title="EPANET Hydraulic & Risk Assessment Suite",
     page_icon="💧",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed"
 )
 
-# تخصيص واجهة المستخدم، إخفاء أدوات المنصة، وضمان وضوح الرموز والنصوص
+# تخصيص واجهة المستخدم، إخفاء الشريط الجانبي وأدوات المنصة بالكامل
 st.markdown("""
 <style>
+    /* إخفاء الشريط الجانبي تماماً من الوجود */
+    [data-testid="stSidebar"] {
+        display: none !important;
+    }
+    
+    /* إخفاء زر إظهار الشريط الجانبي العلوي */
+    [data-testid="collapsedControl"] {
+        display: none !important;
+    }
+
     /* إخفاء شريط أدوات ستريامليت العلوي وزر Manage app بالكامل */
     #MainMenu {visibility: hidden;}
     header {visibility: hidden;}
@@ -47,14 +57,6 @@ st.markdown("""
         font-weight: 500;
     }
 
-    [data-testid="stSidebar"] {
-        background-color: #0F172A;
-        color: #E2E8F0;
-    }
-    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3, [data-testid="stSidebar"] label {
-        color: #38BDF8 !important;
-    }
-
     [data-testid="stMetricValue"] {
         color: #0284C7 !important;
         font-weight: 700;
@@ -75,8 +77,8 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown("<h1 class='main-title'>💧 EPANET Hydraulic & Risk Assessment Suite</h1>", unsafe_allow_html=True)
-st.markdown("<p class='sub-title'>Advanced Sequential Pipe Failure Simulation & Exact EPANET Node Diagnostics</p>", unsafe_allow_html=True)
+st.markdown("<h1 class='main-title'>💧 EPANET Hydraulic & Risk Assessment Suite</h1>", unsafe_app_html=True)
+st.markdown("<p class='sub-title'>Advanced Sequential Pipe Failure Simulation & Exact EPANET Node Diagnostics</p>", unsafe_app_html=True)
 
 def map_serviceability_to_risk(ratio):
     if ratio <= 50.0:
@@ -109,8 +111,13 @@ def get_node_demand_lps(junction, wn_units):
             return total_demand * 1000.0
     return total_demand
 
-st.sidebar.header("📁 File Upload & Settings")
-uploaded_file = st.sidebar.file_uploader("Upload EPANET (.inp) File", type=["inp"])
+# تصميم واجهة الرفع في منتصف الشاشة الرئيسية بعرض كامل مرتب
+st.markdown("---")
+col_up1, col_up2, col_up3 = st.columns([1, 2, 1])
+with col_up2:
+    st.markdown("### 📁 Upload EPANET Network File")
+    uploaded_file = st.file_uploader("Upload EPANET (.inp) File to start analysis", type=["inp"])
+st.markdown("---")
 
 if uploaded_file is not None:
     with tempfile.NamedTemporaryFile(delete=False, suffix=".inp") as tmp_file:
@@ -339,4 +346,4 @@ if uploaded_file is not None:
         if os.path.exists(tmp_path):
             os.remove(tmp_path)
 else:
-    st.info("👈 Please upload an EPANET `.inp` file from the sidebar to start the analysis.")
+    st.info("👈 Please upload an EPANET `.inp` file using the uploader above to start the analysis.")
