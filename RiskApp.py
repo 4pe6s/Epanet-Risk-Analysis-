@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import re
 import matplotlib.pyplot as plt
 import networkx as nx
 
@@ -11,7 +10,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Custom CSS for styling
+# Custom CSS
 st.markdown("""
 <style>
     .main-title {
@@ -27,25 +26,12 @@ st.markdown("""
         font-size: 1.1rem;
         margin-bottom: 25px;
     }
-    .metric-card {
-        background-color: #F3F4F6;
-        padding: 15px;
-        border-radius: 10px;
-        border-left: 5px solid #2563EB;
-        margin-bottom: 10px;
-    }
-    .stTable {
-        font-size: 0.9rem;
-    }
 </style>
 """, unsafe_allow_html=True)
 
 st.markdown("<h1 class='main-title'>💧 EPANET Hydraulic Simulation Suite</h1>", unsafe_allow_html=True)
 st.markdown("<p class='sub-title'>Complete pipe closure impact analysis with sequential hydraulic simulations & Risk Index calculation</p>", unsafe_allow_html=True)
 
-# ---------------------------------------------------------
-# Helper Functions for Parsing .INP File
-# ---------------------------------------------------------
 def parse_inp_file(content):
     lines = content.splitlines()
     sections = {}
@@ -61,7 +47,6 @@ def parse_inp_file(content):
         elif current_section:
             sections[current_section].append(line)
             
-    # Extract Junctions
     junctions = []
     if "JUNCTIONS" in sections:
         for line in sections["JUNCTIONS"]:
@@ -73,7 +58,6 @@ def parse_inp_file(content):
                 junctions.append({"ID": j_id, "Elevation": elevation, "Demand": demand})
     df_junctions = pd.DataFrame(junctions)
 
-    # Extract Pipes
     pipes = []
     if "PIPES" in sections:
         for line in sections["PIPES"]:
@@ -92,7 +76,6 @@ def parse_inp_file(content):
                 })
     df_pipes = pd.DataFrame(pipes)
 
-    # Extract Coordinates
     coords = {}
     if "COORDINATES" in sections:
         for line in sections["COORDINATES"]:
@@ -100,7 +83,6 @@ def parse_inp_file(content):
             if len(parts) >= 3:
                 coords[parts[0]] = (float(parts[1]), float(parts[2]))
                 
-    # Extract Options
     options = {}
     if "OPTIONS" in sections:
         for line in sections["OPTIONS"]:
@@ -111,17 +93,6 @@ def parse_inp_file(content):
     return df_junctions, df_pipes, coords, options
 
 def map_serviceability_to_risk(ratio):
-    """
-    Table 3.14: Serviceability and Risk Index mapping
-    Serviceability (qn/q0) -> Risk Index
-    0.0 -> 5
-    0.5 -> 5
-    0.6 -> 4
-    0.7 -> 3
-    0.8 -> 2
-    0.9 -> 1
-    1.0 -> 1
-    """
     if ratio <= 0.5:
         return 5
     elif ratio <= 0.6:
@@ -133,9 +104,6 @@ def map_serviceability_to_risk(ratio):
     else:
         return 1
 
-# ---------------------------------------------------------
-# UI Layout
-# ---------------------------------------------------------
 uploaded_file = st.file_uploader("Drop your .inp file here or click to browse", type=["inp"])
 
 if uploaded_file is not None:
@@ -144,7 +112,6 @@ if uploaded_file is not None:
     
     st.success("File uploaded and parsed successfully!")
     
-    # Top Stats Bar
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         st.metric("Total Nodes", f"{len(df_j)}", f"{len(df_j)} Junctions")
@@ -188,7 +155,6 @@ if uploaded_file is not None:
         st.write("Calculates junction flow ratios ($q_n / q_0$) when individual pipes are closed.")
         
         if st.button("🚀 Run Sequential Pipe Failure Analysis"):
-            # Simulation calculation (Simulated pressure-dependent demand / flow drop based on network connectivity)
             results = []
             
             base_G = nx.Graph()
@@ -198,11 +164,10 @@ if uploaded_file is not None:
             for _, pipe in df_p.iterrows():
                 closed_pipe_id = pipe["ID"]
                 
-                # Create network without closed pipe
                 temp_G = base_G.copy()
-                temp_G.remove_edge(pipe["Node1"], pipe["Node2"])
+                if temp_G.has_edge(pipe["Node1"], pipe["Node2"]):
+                    temp_G.remove_edge(pipe["Node1"], pipe["Node2"])
                 
-                # Check connected components to reservoirs/sources (assuming node 1 or main source node)
                 main_component = nx.node_connected_component(temp_G, list(temp_G.nodes())[0]) if len(temp_G.nodes()) > 0 else set()
                 
                 junction_risks = []
@@ -215,11 +180,9 @@ if uploaded_file is not None:
                     if q0 <= 0:
                         continue
                         
-                    # If disconnected, flow qn = 0
                     if j_id not in main_component:
                         qn = 0.0
                     else:
-                        # Simple proximity-based hydraulic loss estimation ratio
                         qn = q0 * np.random.uniform(0.75, 1.0)
                         
                     ratio = qn / q0 if q0 > 0 else 1.0
@@ -233,7 +196,7 @@ if uploaded_file is not None:
                     "Node 1": pipe["Node1"],
                     "Node 2": pipe["Node2"],
                     "Satisfied Demand (L/s)": round(satisfied_demand, 2),
-                    "System Demand Met (%)": round((satisfied_demand / total_demand * 100) if total_demand > 0 else 100, 2),
+                    "System Demand Met Ratio": round((satisfied_demand / total_demand * 100) if total_demand > 0 else 100, 2),
                     "Average Risk Index": round(avg_risk, 2)
                 })
                 
@@ -250,7 +213,7 @@ if uploaded_file is not None:
             col_a, col_b = st.columns([1, 1])
             with col_a:
                 st.subheader("Risk Distribution Table")
-                st.table(df_res[["Closed Pipe", "Average Risk Index", "System Demand Met (%)"]])
+                st.dataframe(df_res[["Closed Pipe", "Average Risk Index", "System Demand Met Ratio"]], use_container_width=True)
             
             with col_b:
                 st.subheader("Risk Category Breakdown")
